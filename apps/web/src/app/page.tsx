@@ -122,8 +122,8 @@ export default function Home() {
                 setAddMiniAppMessage(null);
                 
                 try {
-                  const result = await sdk.actions.addMiniApp();
-                  if (result.added) {
+                  const result: any = await sdk.actions.addMiniApp();
+                  if (result?.added) {
                     setAddMiniAppMessage("✅ Miniapp added successfully!");
                   } else {
                     setAddMiniAppMessage("ℹ️ Miniapp was not added (user declined or already exists)");
