@@ -1,5 +1,7 @@
 # Heirdrop
-[https://www.canva.com/design/DAG5gvc-YM0/b6ad6Qs4-40E7y3QcxQllw/edit?utm_content=DAG5gvc-YM0&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton]
+<img width="1920" height="1080" alt="HeirDrop_EthGlobal_BA" src="https://github.com/user-attachments/assets/e143440a-6922-43e8-869f-da519609a7dc" />
+
+[Presentation](https://www.canva.com/design/DAG5gvc-YM0/b6ad6Qs4-40E7y3QcxQllw/edit?utm_content=DAG5gvc-YM0&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton)
 <p align="left">
   <img src="apps/web/public/icon.png" alt="Heirdrop icon" width="180" />
 </p>
