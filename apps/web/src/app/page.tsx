@@ -233,13 +233,13 @@ export default function Home() {
           <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
             <div className="space-y-4">
               <p className="text-xs uppercase tracking-[0.3em] text-indigo-300">
-                Succession Protocol
+                Onchain succession protocol
               </p>
               <h1 className="text-4xl font-semibold text-white">
-                Heirlock keeps your on-chain estate in motion
+                Heirdrop keeps your assets in motion
               </h1>
               <p className="text-base text-slate-300">
-                Configure a living will, ask the protocol to ping you, and release assets to the
+                Configure a will, ask the protocol to ping you, and release assets to the
                 right beneficiaries only when you miss a check-in. Your statement of intent, list of
                 heirs, and ERC-20 allocations are enforced by the Heirlock smart contract.
               </p>
@@ -283,9 +283,6 @@ export default function Home() {
                     ? "Connecting wallet..."
                     : "Tap to connect wallet inside Warpcast"}
                 </p>
-              </div>
-              <div className="mt-6">
-                <ConnectButton chainStatus="icon" showBalance={false} />
               </div>
             </div>
           </div>
