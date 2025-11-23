@@ -1,13 +1,20 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity 0.8.28;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract Heirlock {
+// Self.xyz imports
+import {SelfVerificationRoot} from "@selfxyz/self/contracts/abstract/SelfVerificationRoot.sol";
+import {ISelfVerificationRoot} from "@selfxyz/self/contracts/interfaces/ISelfVerificationRoot.sol";
+
+contract Heirlock is SelfVerificationRoot, Ownable {
     
     // ============ TYPES ============
     
     enum ShareType { ABSOLUTE, BPS }
+    
+    enum BeneficiaryType { ADDRESS_ONLY, IDENTITY_VERIFIED }
     
     struct Share {
         ShareType shareType;
@@ -15,25 +22,42 @@ contract Heirlock {
         bool claimed;
     }
     
+    struct BeneficiaryIdentity {
+        string firstName;
+        string lastName;
+        string dateOfBirth; // Format: "DD-MM-YY"
+    }
+    
     struct Will {
-        address beneficiary;
+        address beneficiary; // Can be zero address for identity-verified beneficiaries
+        BeneficiaryType beneficiaryType;
+        BeneficiaryIdentity identity; // Only used if beneficiaryType == IDENTITY_VERIFIED
         address[] assets;
         mapping(address => Share) assetToShare; // asset address -> Share
         mapping(address => uint256) assetToIndex; // asset address -> index in assets array
+        bool claimed; // Tracks if identity-verified beneficiary has claimed
+        uint256 nullifier; // Stores nullifier after identity claim
     }
     
     struct OwnerConfig {
         uint256 livenessCheckDuration;
         uint256 lastCheckIn;
-        mapping(address => Will) beneficiaryToWill; // beneficiary address -> Will
-        address[] beneficiaries; // list of all beneficiaries
+        mapping(address => Will) beneficiaryToWill; // beneficiary address -> Will (for ADDRESS_ONLY type)
+        mapping(bytes32 => Will) identityToWill; // keccak256(firstName, lastName, dob) -> Will (for IDENTITY_VERIFIED type)
+        address[] beneficiaries; // list of all address-based beneficiaries
+        bytes32[] identityHashes; // list of all identity-based beneficiaries
         mapping(address => uint256) beneficiaryToIndex; // beneficiary -> index in beneficiaries array
+        mapping(bytes32 => uint256) identityHashToIndex; // identity hash -> index in identityHashes array
         mapping(address => uint256) assetTotalAllocatedBps; // asset address -> total BPS allocated
     }
     
     // ============ STATE ============
     
     mapping(address => OwnerConfig) private ownerConfigs;
+    
+    // Self.xyz integration
+    bytes32 public verificationConfigId;
+    mapping(uint256 => bool) public nullifierUsed; // Prevents double claims with same identity
     
     // ============ ERRORS ============
     
@@ -46,15 +70,48 @@ contract Heirlock {
     error NotBeneficiary();
     error InvalidShareAmount();
     error TransferFailed(address asset);
+    error InvalidBeneficiaryType();
+    error IdentityAlreadyClaimed();
+    error NullifierAlreadyUsed();
+    error IdentityMismatch();
+    error InvalidIdentityData();
+    error SelfHubNotConfigured();
     
     // ============ EVENTS ============
     
     event LivenessConfigured(address indexed owner, uint256 duration, uint256 timestamp);
     event CheckIn(address indexed owner, uint256 timestamp);
     event WillCreated(address indexed owner, address indexed beneficiary);
+    event IdentityWillCreated(address indexed owner, bytes32 indexed identityHash, string firstName, string lastName);
     event WillUpdated(address indexed owner, address indexed beneficiary);
+    event IdentityWillUpdated(address indexed owner, bytes32 indexed identityHash);
     event AssetClaimed(address indexed owner, address indexed beneficiary, address indexed asset, uint256 amount);
     event AssetClaimFailed(address indexed owner, address indexed beneficiary, address indexed asset);
+    event IdentityVerified(address indexed owner, bytes32 indexed identityHash, uint256 nullifier, address claimer);
+    
+    // ============ CONSTRUCTOR ============
+    
+    /**
+     * @notice Initialize the Heirlock contract with Self.xyz verification
+     * @param _selfVerificationHub Address of the Self.xyz IdentityVerificationHub
+     * @param _scopeSeed Scope seed string for Self.xyz (hashed with contract address)
+     */
+    constructor(
+        address _selfVerificationHub, 
+        string memory _scopeSeed
+    ) 
+        SelfVerificationRoot(_selfVerificationHub, _scopeSeed) 
+        Ownable(msg.sender) 
+    {
+    }
+    
+    // ============ OWNER FUNCTIONS ============
+    
+    /// @notice Update Self.xyz verification configuration (owner only)
+    /// @param _configId Verification configuration ID
+    function setVerificationConfigId(bytes32 _configId) external onlyOwner {
+        verificationConfigId = _configId;
+    }
     
     // ============ EXTERNAL FUNCTIONS ============
     
@@ -70,7 +127,7 @@ contract Heirlock {
         emit LivenessConfigured(msg.sender, _duration, block.timestamp);
     }
     
-    /// @notice Create or update a will for a beneficiary
+    /// @notice Create or update a will for a beneficiary (address-based)
     /// @param _beneficiary Address that will inherit the assets
     /// @param _assets Array of asset addresses to include in will
     /// @param _shares Array of shares corresponding to each asset
@@ -93,11 +150,105 @@ contract Heirlock {
         
         if (isNewBeneficiary) {
             will.beneficiary = _beneficiary;
+            will.beneficiaryType = BeneficiaryType.ADDRESS_ONLY;
             config.beneficiaryToIndex[_beneficiary] = config.beneficiaries.length;
             config.beneficiaries.push(_beneficiary);
             emit WillCreated(msg.sender, _beneficiary);
         } else {
             emit WillUpdated(msg.sender, _beneficiary);
+        }
+        
+        // Process each asset
+        for (uint256 i = 0; i < _assets.length; i++) {
+            address asset = _assets[i];
+            Share memory newShare = _shares[i];
+            
+            // Validate share amount
+            if (newShare.shareType == ShareType.BPS && newShare.shareAmount > 10000) {
+                revert InvalidShareAmount();
+            }
+            
+            Share storage existingShare = will.assetToShare[asset];
+            bool assetExists = existingShare.shareType == newShare.shareType || 
+                              existingShare.shareAmount != 0 || 
+                              will.assetToIndex[asset] != 0 || 
+                              (will.assets.length > 0 && will.assets[0] == asset);
+            
+            // Handle BPS tracking
+            if (existingShare.shareType == ShareType.BPS) {
+                config.assetTotalAllocatedBps[asset] -= existingShare.shareAmount;
+            }
+            
+            // Delete asset if shareAmount is 0
+            if (newShare.shareAmount == 0) {
+                if (assetExists) {
+                    _removeAssetFromWill(will, asset, config);
+                }
+                continue;
+            }
+            
+            // Update BPS tracking
+            if (newShare.shareType == ShareType.BPS) {
+                uint256 newTotal = config.assetTotalAllocatedBps[asset] + newShare.shareAmount;
+                if (newTotal > 10000) revert BpsExceeded(asset, newTotal);
+                config.assetTotalAllocatedBps[asset] = newTotal;
+            }
+            
+            // Add or update asset
+            if (!assetExists) {
+                will.assetToIndex[asset] = will.assets.length;
+                will.assets.push(asset);
+            }
+            
+            will.assetToShare[asset] = Share({
+                shareType: newShare.shareType,
+                shareAmount: newShare.shareAmount,
+                claimed: false
+            });
+        }
+    }
+    
+    /// @notice Create or update a will for an identity-verified beneficiary
+    /// @param _identity The identity information (firstName, lastName, dateOfBirth) of the beneficiary
+    /// @param _assets Array of asset addresses to include in will
+    /// @param _shares Array of shares corresponding to each asset
+    function createIdentityWill(
+        BeneficiaryIdentity calldata _identity,
+        address[] calldata _assets,
+        Share[] calldata _shares
+    ) external {
+        if (_assets.length != _shares.length) revert ArrayLengthMismatch();
+        if (bytes(_identity.firstName).length == 0 || 
+            bytes(_identity.lastName).length == 0 || 
+            bytes(_identity.dateOfBirth).length == 0) {
+            revert InvalidIdentityData();
+        }
+        
+        OwnerConfig storage config = ownerConfigs[msg.sender];
+        if (config.livenessCheckDuration == 0) revert NotConfigured();
+        
+        // Validate approvals for all assets
+        _validateApprovals(msg.sender, _assets);
+        
+        // Generate identity hash
+        bytes32 identityHash = keccak256(abi.encodePacked(
+            _identity.firstName,
+            _identity.lastName,
+            _identity.dateOfBirth
+        ));
+        
+        Will storage will = config.identityToWill[identityHash];
+        bool isNewBeneficiary = (will.beneficiaryType != BeneficiaryType.IDENTITY_VERIFIED);
+        
+        if (isNewBeneficiary) {
+            will.beneficiary = address(0); // No pre-defined address for identity-verified
+            will.beneficiaryType = BeneficiaryType.IDENTITY_VERIFIED;
+            will.identity = _identity;
+            config.identityHashToIndex[identityHash] = config.identityHashes.length;
+            config.identityHashes.push(identityHash);
+            emit IdentityWillCreated(msg.sender, identityHash, _identity.firstName, _identity.lastName);
+        } else {
+            emit IdentityWillUpdated(msg.sender, identityHash);
         }
         
         // Process each asset
@@ -159,7 +310,7 @@ contract Heirlock {
         emit CheckIn(msg.sender, block.timestamp);
     }
     
-    /// @notice Beneficiary claims inheritance after owner is presumed dead
+    /// @notice Beneficiary claims inheritance after owner is presumed dead (address-based)
     /// @param _owner Address of the owner whose assets to claim
     function claim(address _owner) external {
         OwnerConfig storage config = ownerConfigs[_owner];
@@ -198,6 +349,37 @@ contract Heirlock {
                 emit AssetClaimFailed(_owner, msg.sender, asset);
             }
         }
+    }
+    
+    /// @notice Initiate identity-verified claim process
+    /// @param _owner Address of the owner whose assets to claim
+    /// @param _identityHash The expected identity hash (can be obtained via generateIdentityHash)
+    /// @param _proof The Self.xyz verification proof
+    /// @dev This function initiates the claim and verification happens in customVerificationHook
+    function claimWithIdentity(
+        address _owner, 
+        bytes32 _identityHash,
+        bytes calldata _proof
+    ) external {
+        OwnerConfig storage config = ownerConfigs[_owner];
+        
+        // Check owner is presumed dead
+        if (config.lastCheckIn + config.livenessCheckDuration >= block.timestamp) {
+            revert OwnerStillAlive();
+        }
+        
+        // Get will for this identity
+        Will storage will = config.identityToWill[_identityHash];
+        if (will.beneficiaryType != BeneficiaryType.IDENTITY_VERIFIED) revert NotBeneficiary();
+        
+        // Check identity hasn't already claimed
+        if (will.claimed) revert IdentityAlreadyClaimed();
+        
+        // Prepare user data: encode owner address for the hook
+        bytes memory userData = abi.encode(_owner, _identityHash);
+        
+        // Call parent's verify function which will trigger customVerificationHook
+        bytes32 userIdentifier = bytes32(uint256(uint160(msg.sender)));
     }
     
     // ============ VIEW FUNCTIONS ============
@@ -254,6 +436,147 @@ contract Heirlock {
     /// @return totalBps Total basis points allocated
     function getAssetTotalAllocatedBps(address _owner, address _asset) external view returns (uint256) {
         return ownerConfigs[_owner].assetTotalAllocatedBps[_asset];
+    }
+    
+    /// @notice Get list of identity hashes for an owner
+    /// @param _owner Address of the owner
+    /// @return identityHashes Array of identity hashes
+    function getIdentityBeneficiaries(address _owner) external view returns (bytes32[] memory) {
+        return ownerConfigs[_owner].identityHashes;
+    }
+    
+    /// @notice Get will details for a specific identity-based beneficiary
+    /// @param _owner Address of the owner
+    /// @param _identityHash The identity hash
+    /// @return assets Array of asset addresses in the will
+    function getIdentityWillAssets(address _owner, bytes32 _identityHash) external view returns (address[] memory) {
+        return ownerConfigs[_owner].identityToWill[_identityHash].assets;
+    }
+    
+    /// @notice Get identity details for an identity-based beneficiary
+    /// @param _owner Address of the owner
+    /// @param _identityHash The identity hash
+    /// @return identity The beneficiary's identity information
+    function getIdentityInfo(address _owner, bytes32 _identityHash) 
+        external 
+        view 
+        returns (BeneficiaryIdentity memory) 
+    {
+        return ownerConfigs[_owner].identityToWill[_identityHash].identity;
+    }
+    
+    /// @notice Get share details for a specific asset in an identity-based will
+    /// @param _owner Address of the owner
+    /// @param _identityHash The identity hash
+    /// @param _asset Address of the asset
+    /// @return share The share configuration for that asset
+    function getIdentityAssetShare(address _owner, bytes32 _identityHash, address _asset) 
+        external 
+        view 
+        returns (Share memory) 
+    {
+        return ownerConfigs[_owner].identityToWill[_identityHash].assetToShare[_asset];
+    }
+    
+    /// @notice Check if an identity-based beneficiary has claimed
+    /// @param _owner Address of the owner
+    /// @param _identityHash The identity hash
+    /// @return claimed True if the identity has claimed
+    function hasIdentityClaimed(address _owner, bytes32 _identityHash) external view returns (bool) {
+        return ownerConfigs[_owner].identityToWill[_identityHash].claimed;
+    }
+    
+    /// @notice Generate identity hash from identity data
+    /// @param _identity The identity information
+    /// @return identityHash The keccak256 hash of the identity
+    function generateIdentityHash(BeneficiaryIdentity calldata _identity) external pure returns (bytes32) {
+        return keccak256(abi.encodePacked(
+            _identity.firstName,
+            _identity.lastName,
+            _identity.dateOfBirth
+        ));
+    }
+    
+    // ============ SELF.XYZ OVERRIDES ============
+    
+    /**
+     * @notice Override to provide configId for verification
+     * @dev Called by SelfVerificationRoot during verification process
+     */
+    function getConfigId(
+        bytes32 destinationChainId,
+        bytes32 userIdentifier,
+        bytes memory userDefinedData
+    ) public view override returns (bytes32) {
+        return verificationConfigId;
+    }
+    
+    /**
+     * @notice Hook called after successful Self.xyz verification
+     * @dev Processes the identity claim and transfers assets
+     * @param output The verification output containing verified identity data
+     * @param userData Encoded data containing owner address and identity hash
+     */
+    function customVerificationHook(
+        ISelfVerificationRoot.GenericDiscloseOutputV2 memory output,
+        bytes memory userData
+    ) internal override {
+        // Decode user data
+        (address owner, bytes32 expectedIdentityHash) = abi.decode(userData, (address, bytes32));
+        
+        // Check nullifier hasn't been used
+        if (nullifierUsed[output.nullifier]) revert NullifierAlreadyUsed();
+        
+        // Generate identity hash from verified data
+        bytes32 verifiedIdentityHash = keccak256(abi.encodePacked(
+            output.name[0],
+            output.name[1],
+            output.dateOfBirth
+        ));
+        
+        // Verify the identity matches what was expected
+        if (verifiedIdentityHash != expectedIdentityHash) revert IdentityMismatch();
+        
+        OwnerConfig storage config = ownerConfigs[owner];
+        Will storage will = config.identityToWill[expectedIdentityHash];
+        
+        // Verify identity matches the will's stored identity
+        if (!_verifyIdentityMatch(will.identity, output)) revert IdentityMismatch();
+        
+        // Mark nullifier as used and will as claimed
+        nullifierUsed[output.nullifier] = true;
+        will.claimed = true;
+        will.nullifier = output.nullifier;
+        
+        address claimer = address(uint160(output.userIdentifier));
+        
+        emit IdentityVerified(owner, expectedIdentityHash, output.nullifier, claimer);
+        
+        // Attempt to claim each asset
+        address[] memory assets = will.assets;
+        for (uint256 i = 0; i < assets.length; i++) {
+            address asset = assets[i];
+            Share storage share = will.assetToShare[asset];
+            
+            // Skip if already claimed
+            if (share.claimed) continue;
+            
+            uint256 amount = _calculateAmount(owner, asset, share);
+            if (amount == 0) {
+                share.claimed = true;
+                continue;
+            }
+            
+            // Attempt transfer with low-level call
+            bool success = _safeTransferFrom(asset, owner, claimer, amount);
+            
+            if (success) {
+                share.claimed = true;
+                emit AssetClaimed(owner, claimer, asset, amount);
+            } else {
+                emit AssetClaimFailed(owner, claimer, asset);
+            }
+        }
     }
     
     // ============ INTERNAL FUNCTIONS ============
@@ -353,5 +676,20 @@ contract Heirlock {
                 }
             }
         }
+    }
+    
+    /// @notice Verify that the disclosed identity matches the expected identity
+    /// @param _expected The expected identity from the will
+    /// @param _disclosed The disclosed identity from Self.xyz verification
+    /// @return matches True if identities match
+    function _verifyIdentityMatch(
+        BeneficiaryIdentity storage _expected,
+        ISelfVerificationRoot.GenericDiscloseOutputV2 memory _disclosed
+    ) internal view returns (bool) {
+        return (
+            keccak256(bytes(_expected.firstName)) == keccak256(bytes(_disclosed.name[0])) &&
+            keccak256(bytes(_expected.lastName)) == keccak256(bytes(_disclosed.name[1])) &&
+            keccak256(bytes(_expected.dateOfBirth)) == keccak256(bytes(_disclosed.dateOfBirth))
+        );
     }
 }

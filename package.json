@@ -18,6 +18,11 @@
   "packageManager": "pnpm@8.10.0",
   "engines": {
     "node": ">=18.0.0",
-    "pnpm": ">=6.0.0"
+    "pnpm": ">=8.0.0"
+  },
+  "dependencies": {
+    "@selfxyz/core": "^1.1.0-beta.7",
+    "@selfxyz/qrcode": "^1.0.17",
+    "ethers": "^6.15.0"
   }
 }
