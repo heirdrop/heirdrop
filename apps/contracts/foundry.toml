@@ -2,11 +2,20 @@
 src = "src"
 out = "out"
 libs = ["lib"]
+solc = "0.8.28"
 
 # Remappings
 remappings = [
     "@openzeppelin/=lib/openzeppelin-contracts/",
     "@selfxyz/self/contracts/=lib/self/contracts/contracts/"
 ]
+
+# RPC endpoints
+[rpc_endpoints]
+celo_testnet = "https://forno.celo-sepolia.celo-testnet.org"
+
+# Etherscan API keys (override for the blockscout case)
+[etherscan]
+celo_testnet = { key = "", url = "https://celo-sepolia.blockscout.com" }
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

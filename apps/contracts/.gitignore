@@ -3,6 +3,10 @@ cache/
 out/
 lib/
 
+# Environment variables (contains secrets!)
+.env
+.env.local
+
 # Dependencies
 node_modules/
 
