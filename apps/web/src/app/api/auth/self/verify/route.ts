@@ -1,11 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateIdentityHash, getIdentityBeneficiaries, hasIdentityClaimed } from "@/lib/heirlock-contract";
 import type { Address } from "viem";
+import { 
+  SelfBackendVerifier, 
+  DefaultConfigStore, 
+  AllIds 
+} from '@selfxyz/core';
+
+// Initialize SelfBackendVerifier instance
+// Configuration matches the frontend SelfAppBuilder settings
+const selfBackendVerifier = new SelfBackendVerifier(
+  process.env.SELF_SCOPE_SEED!,
+  process.env.NEXT_PUBLIC_NGROK_URL 
+    ? `${process.env.NEXT_PUBLIC_NGROK_URL}/api/auth/self/verify`
+    : `${process.env.NEXT_PUBLIC_URL || 'http://localhost:3000'}/api/auth/self/verify`, // endpoint
+  true, // mockPassport = true for staging_https (testnet)
+  AllIds, // allowed attestation IDs
+  new DefaultConfigStore({
+    minimumAge: 18,
+    excludedCountries: ['CUB', 'IRN', 'PRK', 'RUS'], // 3-letter ISO country codes
+    ofac: false,
+  }),
+  'hex' // userIdentifierType
+);
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    
     console.log("Self verification callback received:", {
       timestamp: new Date().toISOString(),
       data: body,
@@ -13,76 +34,103 @@ export async function POST(request: NextRequest) {
 
     // The Self.xyz SDK will send the verification result to this endpoint
     const { 
-      userIdentifier, 
-      nullifier, 
-      name, 
-      dateOfBirth, 
-      nationality,
-      minimumAge,
+      attestationId,
       proof,
+      publicSignals,
+      userContextData,
     } = body;
 
-    // Validate required fields
-    if (!name || !Array.isArray(name) || name.length < 2) {
+    // Validate required fields (per Self.xyz API spec)
+    if (!proof || !publicSignals || !attestationId || !userContextData) {
       return NextResponse.json(
         {
-          success: false,
-          error: "Invalid name data",
-          message: "Name must be an array with at least 2 elements (firstName, lastName)",
+          status: "error",
+          result: false,
+          reason: "Proof, publicSignals, attestationId and userContextData are required",
         },
-        { status: 400 }
+        { status: 200 } // Always return 200 per Self.xyz spec
       );
     }
 
-    if (!dateOfBirth) {
+    // Verify the proof using SelfBackendVerifier
+    const result = await selfBackendVerifier.verify(
+      attestationId,
+      proof,
+      publicSignals,
+      userContextData
+    );
+
+    console.log("Verification result:", result);
+
+    // Check if verification is valid
+    const { isValid, isMinimumAgeValid } = result.isValidDetails;
+    if (!isValid || !isMinimumAgeValid) {
+      let reason = "Verification failed";
+      if (!isMinimumAgeValid) reason = "Minimum age verification failed";
       return NextResponse.json(
         {
-          success: false,
-          error: "Missing dateOfBirth",
+          status: "error",
+          result: false,
+          reason,
         },
-        { status: 400 }
+        { status: 200 } // Always return 200 per Self.xyz spec
       );
     }
 
-    const [firstName, lastName] = name;
-
-    // Generate identity hash to match against contract records
-    let identityHash: string;
-    try {
-      identityHash = await generateIdentityHash(firstName, lastName, dateOfBirth);
-      console.log("Generated identity hash:", identityHash);
-    } catch (error) {
-      console.error("Error generating identity hash:", error);
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Failed to generate identity hash",
-          message: error instanceof Error ? error.message : "Unknown error",
-        },
-        { status: 500 }
-      );
-    }
-
-    // Extract owner address from userDefinedData if available
-    // The userDefinedData should contain the owner address for the will
-    let ownerAddress: Address | null = null;
-    try {
-      const userDefinedData = body.userDefinedData;
-      if (userDefinedData) {
-        const parsed = typeof userDefinedData === "string" 
-          ? JSON.parse(userDefinedData) 
-          : userDefinedData;
-        if (parsed.ownerAddress) {
-          ownerAddress = parsed.ownerAddress as Address;
-        }
+    // Extract identity data from verification result
+    const discloseOutput = result.discloseOutput || {};
+    const userData = result.userData || {};
+    
+    // Parse name - can be array [firstName, lastName] or object
+    let firstName: string | null = null;
+    let lastName: string | null = null;
+    if (discloseOutput.name) {
+      if (Array.isArray(discloseOutput.name) && discloseOutput.name.length >= 2) {
+        const nameArray = discloseOutput.name as unknown[];
+        firstName = (nameArray[0] as string) || null;
+        lastName = (nameArray[1] as string) || null;
+      } else if (typeof discloseOutput.name === 'object' && discloseOutput.name !== null) {
+        const nameObj = discloseOutput.name as Record<string, unknown>;
+        firstName = (nameObj.firstName || nameObj.first || null) as string | null;
+        lastName = (nameObj.lastName || nameObj.last || null) as string | null;
       }
-    } catch (error) {
-      console.warn("Could not parse userDefinedData:", error);
     }
 
-    // Check if identity has already claimed (if owner is known)
+    const dateOfBirth = (discloseOutput.dateOfBirth || null) as string | null;
+    const nationality = discloseOutput.nationality || null;
+
+    // Parse userDefinedData to extract owner address if provided
+    let ownerAddress: Address | null = null;
+    let parsedUserDefinedData: any = null;
+    if (userData.userDefinedData) {
+      try {
+        parsedUserDefinedData = typeof userData.userDefinedData === "string" 
+          ? JSON.parse(userData.userDefinedData) 
+          : userData.userDefinedData;
+        
+        // Try to extract owner address from userDefinedData
+        if (parsedUserDefinedData.ownerAddress) {
+          ownerAddress = parsedUserDefinedData.ownerAddress as Address;
+        }
+      } catch (error) {
+        console.warn("Could not parse userDefinedData:", error);
+      }
+    }
+
+    // Generate identity hash if we have the required data
+    let identityHash: string | null = null;
+    if (firstName && lastName && dateOfBirth) {
+      try {
+        identityHash = await generateIdentityHash(firstName, lastName, dateOfBirth);
+        console.log("Generated identity hash:", identityHash);
+      } catch (error) {
+        console.error("Error generating identity hash:", error);
+      }
+    }
+
+    // Check if identity has already claimed (if owner is known and identity hash is available)
     let alreadyClaimed = false;
-    if (ownerAddress) {
+    if (ownerAddress && identityHash) {
       try {
         alreadyClaimed = await hasIdentityClaimed(ownerAddress, identityHash as `0x${string}`);
         console.log("Identity claim status:", alreadyClaimed);
@@ -102,39 +150,44 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Return verification result with contract interaction data
-    return NextResponse.json({
-      success: true,
-      message: "Verification received and processed",
-      data: {
-        userIdentifier,
-        nullifier,
-        identityHash,
-        identity: {
-          firstName,
-          lastName,
-          dateOfBirth,
-          nationality,
+    // Return success response per Self.xyz API spec
+    return NextResponse.json(
+      {
+        status: "success",
+        result: true,
+        data: {
+          attestationId: result.attestationId,
+          identity: {
+            firstName,
+            lastName,
+            dateOfBirth,
+            nationality,
+            minimumAge: discloseOutput.minimumAge,
+          },
+          userData: {
+            userIdentifier: userData.userIdentifier,
+            userDefinedData: parsedUserDefinedData,
+          },
+          contract: {
+            ownerAddress,
+            alreadyClaimed,
+            beneficiaries,
+            identityHash,
+          },
+          timestamp: new Date().toISOString(),
         },
-        contract: {
-          ownerAddress,
-          alreadyClaimed,
-          beneficiaries,
-          identityHash,
-        },
-        proof: proof ? "present" : "missing", // Don't send full proof in response
-        timestamp: new Date().toISOString(),
       },
-    });
+      { status: 200 }
+    );
   } catch (error) {
     console.error("Error processing Self verification:", error);
     return NextResponse.json(
       {
-        success: false,
-        error: "Failed to process verification",
-        message: error instanceof Error ? error.message : "Unknown error",
+        status: "error",
+        result: false,
+        reason: error instanceof Error ? error.message : "Unknown error",
       },
-      { status: 500 }
+      { status: 200 } // Always return 200 per Self.xyz spec
     );
   }
 }
@@ -146,4 +199,3 @@ export async function GET(request: NextRequest) {
     timestamp: new Date().toISOString(),
   });
 }
-

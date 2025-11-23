@@ -27,7 +27,7 @@ export default function VerifyPage() {
       const app = new SelfAppBuilder({
         version: 2,
         appName: "Heirdrop",
-        scope: "heirdrop-identity-verification",
+        scope: process.env.SELF_SCOPE_SEED!,
         endpoint,
         logoBase64: "", // Add your base64 logo if needed
         userId: address,
