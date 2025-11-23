@@ -5,6 +5,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactNode } from "react";
 import { WagmiProvider, createConfig, http } from "wagmi";
 import { celo, celoAlfajores } from "wagmi/chains";
+import {
+  RainbowKitProvider,
+  darkTheme,
+} from "@rainbow-me/rainbowkit";
 
 const config = createConfig({
   chains: [celo, celoAlfajores],
@@ -24,7 +28,20 @@ export default function FrameWalletProvider({
 }) {
   return (
     <WagmiProvider config={config}>
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      <QueryClientProvider client={queryClient}>
+        <RainbowKitProvider
+          theme={darkTheme({
+            accentColor: "#6366f1",
+            accentColorForeground: "white",
+            borderRadius: "large",
+            fontStack: "system",
+            overlayBlur: "small",
+          })}
+          modalSize="compact"
+        >
+          {children}
+        </RainbowKitProvider>
+      </QueryClientProvider>
     </WagmiProvider>
   );
 }
