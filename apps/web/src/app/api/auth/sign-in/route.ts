@@ -1,6 +1,5 @@
 import { Errors, createClient } from "@farcaster/quick-auth";
 
-import { env } from "@/lib/env";
 import * as jose from "jose";
 import { NextRequest, NextResponse } from "next/server";
 import { Address, zeroAddress } from "viem";
@@ -19,7 +18,7 @@ export const POST = async (req: NextRequest): Promise<NextResponse> => {
   // Verify signature matches custody address and auth address
   try {
     const payload = await quickAuthClient.verifyJwt({
-      domain: new URL(env.NEXT_PUBLIC_URL).hostname,
+      domain: new URL(process.env.NEXT_PUBLIC_URL!).hostname,
       token: farcasterToken,
     });
     isValidSignature = !!payload;
@@ -42,7 +41,7 @@ export const POST = async (req: NextRequest): Promise<NextResponse> => {
   }
 
   // Generate JWT token
-  const secret = new TextEncoder().encode(env.JWT_SECRET);
+  const secret = new TextEncoder().encode(process.env.JWT_SECRET!);
   const token = await new jose.SignJWT({
     fid,
     walletAddress,

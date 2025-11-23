@@ -1,16 +1,15 @@
 import { createPublicClient, http, type Address, type Hash } from "viem";
-import { celoAlfajores } from "viem/chains";
+import { celoSepolia } from "viem/chains";
 import heirlockAbi from "./heirlock-abi.json";
-import { env } from "./env";
 
-export const HEIRLOCK_CONTRACT_ADDRESS = (env.NEXT_PUBLIC_HEIRLOCK_CONTRACT_ADDRESS || "0xdeaD5EE9Ea38d2aC5802FF9D76335DB3Eda0DEad") as Address;
+export const HEIRLOCK_CONTRACT_ADDRESS = (process.env.NEXT_PUBLIC_HEIRLOCK_CONTRACT_ADDRESS || "0xdead5ee9ea38d2ac5802ff9d76335db3eda0dead") as Address;
 
 export type HeirlockABI = typeof heirlockAbi;
 
 export function getHeirlockClient(rpcUrl?: string) {
-  const url = rpcUrl || env.CELO_RPC_URL || "https://alfajores-forno.celo-testnet.org";
+  const url = rpcUrl || process.env.CELO_RPC_URL;
   return createPublicClient({
-    chain: celoAlfajores,
+    chain: celoSepolia,
     transport: http(url),
   });
 }

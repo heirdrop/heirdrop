@@ -1,5 +1,3 @@
-import { env } from "@/lib/env";
-
 /**
  * Get the farcaster manifest for the frame, generate yours from Warpcast Mobile
  *  On your phone to Settings > Developer > Domains > insert website hostname > Generate domain manifest
@@ -7,17 +5,17 @@ import { env } from "@/lib/env";
  */
 export async function getFarcasterManifest() {
   const frameName = "heirdrop";
-  const appUrl = env.NEXT_PUBLIC_URL;
+  const appUrl = process.env.NEXT_PUBLIC_URL!;
   const noindex = appUrl.includes("localhost") || appUrl.includes("ngrok") || appUrl.includes("https://dev.");
 
   // Check if account association is properly configured
   const hasValidAccountAssociation = 
-    env.NEXT_PUBLIC_FARCASTER_HEADER !== "build-time-placeholder" &&
-    env.NEXT_PUBLIC_FARCASTER_PAYLOAD !== "build-time-placeholder" &&
-    env.NEXT_PUBLIC_FARCASTER_SIGNATURE !== "build-time-placeholder";
+    process.env.NEXT_PUBLIC_FARCASTER_HEADER !== "build-time-placeholder" &&
+    process.env.NEXT_PUBLIC_FARCASTER_PAYLOAD !== "build-time-placeholder" &&
+    process.env.NEXT_PUBLIC_FARCASTER_SIGNATURE !== "build-time-placeholder";
 
   // In development mode, allow placeholder values for testing
-  const isDevelopment = env.NEXT_PUBLIC_APP_ENV === "development" || appUrl.includes("localhost");
+  const isDevelopment = process.env.NEXT_PUBLIC_APP_ENV === "development" || appUrl.includes("localhost");
   
   if (!hasValidAccountAssociation && !isDevelopment) {
     throw new Error(
@@ -29,9 +27,9 @@ export async function getFarcasterManifest() {
 
   // Use development fallback values if in development mode and no real values are set
   const accountAssociation = hasValidAccountAssociation ? {
-    header: env.NEXT_PUBLIC_FARCASTER_HEADER,
-    payload: env.NEXT_PUBLIC_FARCASTER_PAYLOAD,
-    signature: env.NEXT_PUBLIC_FARCASTER_SIGNATURE,
+    header: process.env.NEXT_PUBLIC_FARCASTER_HEADER!,
+    payload: process.env.NEXT_PUBLIC_FARCASTER_PAYLOAD!,
+    signature: process.env.NEXT_PUBLIC_FARCASTER_SIGNATURE!,
   } : {
     // Development fallback - these are placeholder values for local testing
     header: "eyJmaWQiOjEyMzQ1LCJ0eXBlIjoiY3VzdG9keSIsImtleSI6IjB4ZGV2ZWxvcG1lbnRfa2V5In0",

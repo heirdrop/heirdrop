@@ -10,7 +10,7 @@ import {
 // Initialize SelfBackendVerifier instance
 // Configuration matches the frontend SelfAppBuilder settings
 const selfBackendVerifier = new SelfBackendVerifier(
-  process.env.SELF_SCOPE_SEED!,
+  process.env.NEXT_PUBLIC_SELF_SCOPE_SEED!,
   process.env.NEXT_PUBLIC_NGROK_URL 
     ? `${process.env.NEXT_PUBLIC_NGROK_URL}/api/auth/self/verify`
     : `${process.env.NEXT_PUBLIC_URL || 'http://localhost:3000'}/api/auth/self/verify`, // endpoint

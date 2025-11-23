@@ -5,7 +5,6 @@ import { SelfQRcodeWrapper, SelfAppBuilder, countries } from "@selfxyz/qrcode";
 import type { SelfApp } from "@selfxyz/qrcode";
 import { useAccount } from "wagmi";
 import Link from "next/link";
-import { env } from "@/lib/env";
 
 export default function VerifyPage() {
   const { address } = useAccount();
@@ -21,16 +20,16 @@ export default function VerifyPage() {
 
     try {
       // Use ngrok URL if available (for development), otherwise use the origin
-      const baseUrl = env.NEXT_PUBLIC_NGROK_URL || window.location.origin;
+      const baseUrl = process.env.NEXT_PUBLIC_NGROK_URL || window.location.origin;
       const endpoint = `${baseUrl}/api/auth/self/verify`;
 
       const app = new SelfAppBuilder({
         version: 2,
         appName: "Heirdrop",
-        scope: process.env.SELF_SCOPE_SEED!,
+        scope: process.env.NEXT_PUBLIC_SELF_SCOPE_SEED!,
         endpoint,
         logoBase64: "", // Add your base64 logo if needed
-        userId: address,
+        userId: address.toLowerCase() as `0x${string}`,
         endpointType: "staging_https",
         userIdType: "hex",
         userDefinedData: JSON.stringify({
