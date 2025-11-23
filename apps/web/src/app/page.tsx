@@ -525,52 +525,6 @@ export default function Home() {
           </form>
         </section>
 
-        <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-6 text-center">
-          <h4 className="text-lg font-semibold text-white">Pin Heirlock inside Warpcast</h4>
-          <p className="mt-2 text-sm text-slate-400">
-            Add the mini app to your Warpcast sidebar and summon it whenever you need to adjust
-            beneficiaries or check-in manually.
-          </p>
-          <button
-            onClick={async () => {
-              if (isAddingMiniApp) return;
-
-              setIsAddingMiniApp(true);
-              setAddMiniAppMessage(null);
-
-              try {
-                const result: any = await sdk.actions.addMiniApp();
-                if (result?.added) {
-                  setAddMiniAppMessage("✅ Miniapp added successfully!");
-                } else {
-                  setAddMiniAppMessage(
-                    "ℹ️ Miniapp was not added (user declined or already exists)"
-                  );
-                }
-              } catch (error: any) {
-                console.error("Add miniapp error:", error);
-                if (error?.message?.includes("domain")) {
-                  setAddMiniAppMessage(
-                    "⚠️ This miniapp can only be added from its official domain"
-                  );
-                } else {
-                  setAddMiniAppMessage("❌ Failed to add miniapp. Please try again.");
-                }
-              } finally {
-                setIsAddingMiniApp(false);
-              }
-            }}
-            disabled={isAddingMiniApp}
-            className="mt-4 inline-flex items-center justify-center gap-2 rounded-full bg-indigo-500 px-8 py-3 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:bg-indigo-400"
-          >
-            {isAddingMiniApp ? "Adding..." : "Add Heirlock mini app"}
-          </button>
-          {addMiniAppMessage && (
-            <div className="mt-3 rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-200">
-              {addMiniAppMessage}
-            </div>
-          )}
-        </section>
       </div>
     </main>
   );
