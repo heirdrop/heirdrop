@@ -65,7 +65,7 @@ export default function Home() {
                 HeirDrop is an onchain succession protocol that lets you create a digital will for your crypto legacy.
                 Designate an heir (a wallet or a person) to claim your assets across multiple EVM chains.
                 Set it and forget it—Heirdrop ensures your digital wealth transfers seamlessly when it matters most,
-                whether it's for inheritance, private key recovery,or peace of mind.
+                whether it&apos;s for inheritance, private key recovery,or peace of mind.
               </p>
             </div>
             <div className="w-full rounded-2xl border border-border bg-card/80 p-6 text-center md:max-w-xs">

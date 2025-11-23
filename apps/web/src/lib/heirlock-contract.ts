@@ -2,7 +2,13 @@ import { createPublicClient, http, type Address, type Hash } from "viem";
 import { celoSepolia } from "viem/chains";
 import heirlockAbi from "./heirlock-abi.json";
 
-export const HEIRLOCK_CONTRACT_ADDRESS = (process.env.NEXT_PUBLIC_HEIRLOCK_CONTRACT_ADDRESS || "0xdead5ee9ea38d2ac5802ff9d76335db3eda0dead") as Address;
+const FALLBACK_ADDRESS = "0xdead5ee9ea38d2ac5802ff9d76335db3eda0dead";
+const envAddress =
+  process.env.NEXT_PUBLIC_HEIRLOCK_CONTRACT_ADDRESS ||
+  process.env.NEXT_PUBLIC_HEIRLOCK_ADDRESS ||
+  FALLBACK_ADDRESS;
+
+export const HEIRLOCK_CONTRACT_ADDRESS = envAddress as Address;
 
 export type HeirlockABI = typeof heirlockAbi;
 

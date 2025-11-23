@@ -1,8 +1,11 @@
 "use client";
 import { HeartbeatLiveness } from "@/components/heartbeat-liveness";
 import { useMiniApp } from "@/contexts/miniapp-context";
+import heirlockAbi from "@/lib/heirlock-abi.json";
+import { HEIRLOCK_CONTRACT_ADDRESS } from "@/lib/heirlock-contract";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { useAccount, useConnect } from "wagmi";
+import { BaseError, isAddress } from "viem";
+import { useAccount, useConnect, usePublicClient, useWriteContract } from "wagmi";
 
 type AssetHolding = {
   id: string;
@@ -17,7 +20,10 @@ type AssetHolding = {
 type BeneficiaryEntry = {
   id: string;
   label: string;
+  mode: "wallet" | "identity";
   wallet: string;
+  fullName: string;
+  birthDate: string;
   assetAddress: string;
   shareType: "ABSOLUTE" | "BPS";
   shareAmount: string;
@@ -27,6 +33,76 @@ const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
 });
+
+const shareTypeToEnum: Record<BeneficiaryEntry["shareType"], number> = {
+  ABSOLUTE: 1,
+  BPS: 2,
+};
+
+type PreparedInstruction = {
+  id: string;
+  mode: BeneficiaryEntry["mode"];
+  wallet?: `0x${string}`;
+  identity?: {
+    firstName: string;
+    lastName: string;
+    dateOfBirth: string;
+  };
+  assetAddress: `0x${string}`;
+  shareTuple: {
+    shareType: number;
+    shareAmount: bigint;
+    claimed: boolean;
+  };
+  shareTypeLabel: BeneficiaryEntry["shareType"];
+};
+
+function formatBirthDate(dateValue: string) {
+  const trimmed = dateValue.trim();
+  const [year, month, day] = trimmed.split("-");
+  if (year && month && day) {
+    return `${day}-${month}-${year.slice(-2)}`;
+  }
+  return trimmed;
+}
+
+function normalizeIdentity(fullName: string, birthDate: string) {
+  const segments = fullName.trim().split(/\s+/);
+  if (segments.length < 2) {
+    throw new Error("Enter both a first and last name for identity beneficiaries.");
+  }
+  const firstName = segments.shift() as string;
+  const lastName = segments.join(" ");
+  if (!birthDate) {
+    throw new Error("Select a birth date for identity beneficiaries.");
+  }
+  return {
+    firstName,
+    lastName,
+    dateOfBirth: formatBirthDate(birthDate),
+  };
+}
+
+function parseShareValue(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    throw new Error("Enter a share amount for each beneficiary.");
+  }
+  if (trimmed.includes(".")) {
+    throw new Error("Share amounts should be whole numbers (wei or BPS).");
+  }
+  return BigInt(trimmed);
+}
+
+function formatContractError(error: unknown) {
+  if (error instanceof BaseError && error.shortMessage) {
+    return error.shortMessage;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return "Something went wrong while talking to the contract.";
+}
 
 export default function Grantor() {
   const { context, isMiniAppReady, isInMiniApp } = useMiniApp();
@@ -42,7 +118,10 @@ export default function Grantor() {
     {
       id: "beneficiary-1",
       label: "Primary Heir",
+      mode: "wallet",
       wallet: "",
+      fullName: "",
+      birthDate: "",
       assetAddress: "",
       shareType: "BPS",
       shareAmount: "2500",
@@ -55,6 +134,8 @@ export default function Grantor() {
   // Wallet connection hooks
   const { address, isConnected, isConnecting } = useAccount();
   const { connect, connectors } = useConnect();
+  const publicClient = usePublicClient();
+  const { writeContractAsync } = useWriteContract();
 
   // Auto-connect wallet when in miniapp context (not regular web)
   useEffect(() => {
@@ -130,11 +211,27 @@ export default function Grantor() {
     setIsVerifyingAssets(true);
     setVerificationMessage(null);
     try {
-      // Placeholder for unified balance indexer call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      if (!isConnected || !address) {
+        throw new Error("Connect your wallet before configuring liveness.");
+      }
+      if (!publicClient) {
+        throw new Error("Wallet client is not ready yet. Please retry.");
+      }
+      const durationDays = Math.max(1, Number(timePeriodDays) || 1);
+      const durationSeconds = BigInt(durationDays * 24 * 60 * 60);
+      const hash = await writeContractAsync({
+        abi: heirlockAbi,
+        address: HEIRLOCK_CONTRACT_ADDRESS,
+        functionName: "configureLiveness",
+        args: [durationSeconds],
+      });
+
+      await publicClient.waitForTransactionReceipt({ hash });
       const timestamp = new Date().toLocaleTimeString();
       setLastVerification(timestamp);
-      setVerificationMessage("Holdings verified across supported EVM chains.");
+      setVerificationMessage("Liveness cadence saved on Heirlock.");
+    } catch (error) {
+      setVerificationMessage(formatContractError(error));
     } finally {
       setIsVerifyingAssets(false);
     }
@@ -146,7 +243,10 @@ export default function Grantor() {
       {
         id: `beneficiary-${current.length + 1}`,
         label: `Heir #${current.length + 1}`,
+        mode: "wallet",
         wallet: "",
+        fullName: "",
+        birthDate: "",
         assetAddress: "",
         shareType: "ABSOLUTE",
         shareAmount: "",
@@ -157,7 +257,7 @@ export default function Grantor() {
   const updateBeneficiary = (
     id: string,
     field: keyof BeneficiaryEntry,
-    value: string
+    value: BeneficiaryEntry[keyof BeneficiaryEntry]
   ) => {
     setBeneficiaries((current) =>
       current.map((entry) =>
@@ -175,12 +275,68 @@ export default function Grantor() {
     setIsSubmittingWill(true);
     setWillStatusMessage(null);
 
-    const sanitizedEntries = beneficiaries.filter(
-      (entry) => entry.wallet && entry.assetAddress && entry.shareAmount
-    );
+    if (!isConnected || !address) {
+      setWillStatusMessage("Connect your wallet to push this draft on-chain.");
+      setIsSubmittingWill(false);
+      return;
+    }
+
+    const sanitizedEntries = beneficiaries.filter((entry) => {
+      const hasIdentity =
+        entry.mode === "wallet"
+          ? Boolean(entry.wallet)
+          : Boolean(entry.fullName && entry.birthDate);
+
+      return hasIdentity && entry.assetAddress && entry.shareAmount;
+    });
 
     if (!sanitizedEntries.length) {
       setWillStatusMessage("Add at least one beneficiary with an asset and share.");
+      setIsSubmittingWill(false);
+      return;
+    }
+
+    let preparedEntries: PreparedInstruction[] = [];
+    try {
+      preparedEntries = sanitizedEntries.map((entry) => {
+        const asset = entry.assetAddress.trim() as `0x${string}`;
+        if (!isAddress(asset)) {
+          throw new Error(`Asset address for ${entry.label || entry.id} is invalid.`);
+        }
+        const shareValue = parseShareValue(entry.shareAmount);
+        const shareTuple = {
+          shareType: shareTypeToEnum[entry.shareType],
+          shareAmount: shareValue,
+          claimed: false,
+        };
+
+        if (entry.mode === "wallet") {
+          const wallet = entry.wallet.trim() as `0x${string}`;
+          if (!isAddress(wallet)) {
+            throw new Error(`Wallet address for ${entry.label || entry.id} is invalid.`);
+          }
+          return {
+            id: entry.id,
+            mode: entry.mode,
+            wallet,
+            assetAddress: asset,
+            shareTuple,
+            shareTypeLabel: entry.shareType,
+          };
+        }
+
+        const identity = normalizeIdentity(entry.fullName, entry.birthDate);
+        return {
+          id: entry.id,
+          mode: entry.mode,
+          identity,
+          assetAddress: asset,
+          shareTuple,
+          shareTypeLabel: entry.shareType,
+        };
+      });
+    } catch (error) {
+      setWillStatusMessage(formatContractError(error));
       setIsSubmittingWill(false);
       return;
     }
@@ -190,21 +346,62 @@ export default function Grantor() {
       owner: walletAddress,
       livenessDurationSeconds: durationDays * 24 * 60 * 60,
       note: personalNote,
-      instructions: sanitizedEntries.map((entry) => ({
-        beneficiary: entry.wallet,
+      instructions: preparedEntries.map((entry) => ({
+        recipientType: entry.mode,
+        wallet: entry.wallet,
+        identity: entry.identity,
         asset: entry.assetAddress,
-        shareType: entry.shareType,
-        shareAmount: entry.shareAmount,
+        shareType: entry.shareTypeLabel,
+        shareAmount: entry.shareTuple.shareAmount.toString(),
       })),
     };
 
     setPayloadPreview(payload);
 
-    await new Promise((resolve) => setTimeout(resolve, 900));
-    setWillStatusMessage(
-      "Draft ready. Push the payload through the Heirlock contract to finalize on-chain."
-    );
-    setIsSubmittingWill(false);
+    if (!publicClient) {
+      setWillStatusMessage("Wallet client is not ready. Please try again.");
+      setIsSubmittingWill(false);
+      return;
+    }
+
+    try {
+      const hashes: `0x${string}`[] = [];
+      for (const entry of preparedEntries) {
+        if (entry.mode === "wallet" && entry.wallet) {
+          const hash = (await writeContractAsync({
+            abi: heirlockAbi,
+            address: HEIRLOCK_CONTRACT_ADDRESS,
+            functionName: "createWill",
+            args: [entry.wallet, [entry.assetAddress], [entry.shareTuple]],
+          })) as `0x${string}`;
+          hashes.push(hash);
+          await publicClient.waitForTransactionReceipt({ hash });
+        } else if (entry.identity) {
+          const hash = (await writeContractAsync({
+            abi: heirlockAbi,
+            address: HEIRLOCK_CONTRACT_ADDRESS,
+            functionName: "createIdentityWill",
+            args: [entry.identity, [entry.assetAddress], [entry.shareTuple]],
+          })) as `0x${string}`;
+          hashes.push(hash);
+          await publicClient.waitForTransactionReceipt({ hash });
+        }
+      }
+
+      if (!hashes.length) {
+        setWillStatusMessage("Nothing to submit. Double-check your entries.");
+      } else {
+        setWillStatusMessage(
+          `Heirlock stored ${hashes.length} allocation${
+            hashes.length > 1 ? "s" : ""
+          }. Latest tx hash: ${hashes[hashes.length - 1]}`
+        );
+      }
+    } catch (error) {
+      setWillStatusMessage(formatContractError(error));
+    } finally {
+      setIsSubmittingWill(false);
+    }
   };
 
   // Only show loading state if we're actually in a miniapp context
@@ -275,19 +472,19 @@ export default function Grantor() {
           <div className="rounded-2xl border border-border bg-card/70 p-6">
             <h3 className="text-xl font-semibold text-foreground">Verification</h3>
             <p className="mt-2 text-sm text-muted-foreground">
-              Before activating a will, confirm that your balances and token approvals are synced
-              with the Heirlock contract. This triggers allowance checks similar to
+              Configure your liveness cadence directly on the Heirlock contract before drafting a
+              will. This calls
               <code className="mx-1 rounded bg-muted px-1 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-                _validateApprovals
+                configureLiveness
               </code>
-              inside the Solidity code.
+              under the hood so heirs can only claim after your check-in window lapses.
             </p>
             <button
               onClick={handleVerifyHoldings}
               disabled={isVerifyingAssets}
               className="mt-6 w-full rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-primary/70"
             >
-              {isVerifyingAssets ? "Verifying..." : "Verify my holdings"}
+              {isVerifyingAssets ? "Saving cadence..." : "Configure liveness"}
             </button>
             <div className="mt-4 rounded-xl border border-border/60 bg-card/80 p-4 text-sm text-muted-foreground">
               {verificationMessage ? (
@@ -300,7 +497,7 @@ export default function Grantor() {
                   )}
                 </>
               ) : (
-                <p>Awaiting verification. Tap the button to refresh the registry.</p>
+                <p>Awaiting liveness configuration. Tap the button to push your cadence on-chain.</p>
               )}
             </div>
           </div>
@@ -394,18 +591,62 @@ export default function Grantor() {
                         </button>
                       )}
                     </div>
-                    <div className="grid gap-4 md:grid-cols-2">
+                    <div className="grid gap-4 md:grid-cols-3">
                       <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
-                        Wallet address
-                        <input
-                          value={entry.wallet}
+                        Recipient type
+                        <select
+                          value={entry.mode}
                           onChange={(event) =>
-                            updateBeneficiary(entry.id, "wallet", event.target.value)
+                            updateBeneficiary(
+                              entry.id,
+                              "mode",
+                              event.target.value as BeneficiaryEntry["mode"]
+                            )
                           }
-                          className="rounded-xl border border-border bg-card/70 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
-                          placeholder="0x..."
-                        />
+                          className="rounded-xl border border-border bg-card/70 px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+                        >
+                          <option value="wallet">Wallet address</option>
+                          <option value="identity">Name + birth date</option>
+                        </select>
                       </label>
+                      {entry.mode === "wallet" ? (
+                        <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground md:col-span-2">
+                          Wallet address
+                          <input
+                            value={entry.wallet}
+                            onChange={(event) =>
+                              updateBeneficiary(entry.id, "wallet", event.target.value)
+                            }
+                            className="rounded-xl border border-border bg-card/70 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+                            placeholder="0x..."
+                          />
+                        </label>
+                      ) : (
+                        <div className="grid gap-4 md:col-span-2 md:grid-cols-2">
+                          <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
+                            Full name
+                            <input
+                              value={entry.fullName}
+                              onChange={(event) =>
+                                updateBeneficiary(entry.id, "fullName", event.target.value)
+                              }
+                              className="rounded-xl border border-border bg-card/70 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+                              placeholder="e.g. Alex Morgan"
+                            />
+                          </label>
+                          <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
+                            Birth date
+                            <input
+                              type="date"
+                              value={entry.birthDate}
+                              onChange={(event) =>
+                                updateBeneficiary(entry.id, "birthDate", event.target.value)
+                              }
+                              className="rounded-xl border border-border bg-card/70 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+                            />
+                          </label>
+                        </div>
+                      )}
                       <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
                         Asset address (ERC-20)
                         <input
@@ -457,7 +698,7 @@ export default function Grantor() {
               <button
                 type="submit"
                 disabled={isSubmittingWill}
-                className="w-full rounded-2xl bg-accent px-6 py-4 text-sm font-semibold text-accent-foreground transition hover:bg-accent/90 disabled:cursor-not-allowed disabled:bg-accent/60"
+                className="w-full rounded-2xl bg-[#ea5600] px-6 py-4 text-sm font-semibold text-white transition hover:bg-[#ea5600]/90 disabled:cursor-not-allowed disabled:bg-[#ea5600]/60"
               >
                 {isSubmittingWill ? "Compiling payload..." : "Create Heirlock will"}
               </button>
@@ -478,4 +719,3 @@ export default function Grantor() {
     </main>
   );
 }
-
