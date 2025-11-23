@@ -9,6 +9,7 @@ export const env = createEnv({
   },
   client: {
     NEXT_PUBLIC_URL: z.string().min(1).optional().default("http://localhost:3000"),
+    NEXT_PUBLIC_NGROK_URL: z.string().url().optional(),
     NEXT_PUBLIC_APP_ENV: z
       .enum(["development", "production"])
       .optional()
@@ -21,6 +22,7 @@ export const env = createEnv({
   // For Next.js >= 13.4.4, you only need to destructure client variables:
   experimental__runtimeEnv: {
     NEXT_PUBLIC_URL: process.env.NEXT_PUBLIC_URL,
+    NEXT_PUBLIC_NGROK_URL: process.env.NEXT_PUBLIC_NGROK_URL,
     NEXT_PUBLIC_APP_ENV: process.env.NEXT_PUBLIC_APP_ENV,
     NEXT_PUBLIC_FARCASTER_HEADER: process.env.NEXT_PUBLIC_FARCASTER_HEADER,
     NEXT_PUBLIC_FARCASTER_PAYLOAD: process.env.NEXT_PUBLIC_FARCASTER_PAYLOAD,
