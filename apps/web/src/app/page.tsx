@@ -238,12 +238,13 @@ export default function Home() {
                 Onchain succession protocol
               </p>
               <h1 className="text-4xl font-semibold text-foreground">
-                Heirdrop keeps your assets in motion
+                HeirDrop keeps your assets in motion
               </h1>
               <p className="text-base text-muted-foreground">
-                Configure a will, ask the protocol to ping you, and release assets to the
-                right beneficiaries only when you miss a check-in. Your statement of intent, list of
-                heirs, and ERC-20 allocations are enforced by the Heirlock smart contract.
+                HeirDrop is an onchain succession protocol that lets you create a digital will for your crypto legacy.
+                Designate an heir (a wallet or a person) to claim your assets across multiple EVM chains.
+                Set it and forget it—Heirdrop ensures your digital wealth transfers seamlessly when it matters most,
+                whether it’s for inheritance, private key recovery,or peace of mind.
               </p>
               <div className="grid gap-4 text-sm text-muted-foreground sm:grid-cols-3">
                 <div className="rounded-xl border border-border/60 bg-card/80 p-4">
