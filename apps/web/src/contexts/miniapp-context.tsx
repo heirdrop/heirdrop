@@ -15,6 +15,7 @@ import FrameWalletProvider from "./frame-wallet-context";
 
 interface MiniAppContextType {
   isMiniAppReady: boolean;
+  isInMiniApp: boolean;
   context: FrameContext | null;
   setMiniAppReady: () => void;
   addMiniApp: () => Promise<AddFrameResult | null>;
@@ -30,16 +31,24 @@ interface MiniAppProviderProps {
 export function MiniAppProvider({ children, addMiniAppOnLoad }: MiniAppProviderProps): JSX.Element {
   const [context, setContext] = useState<FrameContext | null>(null);
   const [isMiniAppReady, setIsMiniAppReady] = useState(false);
+  const [isInMiniApp, setIsInMiniApp] = useState(false);
 
   const setMiniAppReady = useCallback(async () => {
     try {
       const context = await sdk.context;
+      // Check if we're actually in a Farcaster miniapp context
+      const hasContext = !!context;
+      setIsInMiniApp(hasContext);
+      
       if (context) {
         setContext(context);
+        // Only call ready() if we're actually in a miniapp
+        await sdk.actions.ready();
       }
-      await sdk.actions.ready();
     } catch (err) {
-      console.error("SDK initialization error:", err);
+      // If SDK fails, we're not in a miniapp context
+      setIsInMiniApp(false);
+      console.log("Not running in Farcaster miniapp context:", err);
     } finally {
       setIsMiniAppReady(true);
     }
@@ -82,6 +91,7 @@ export function MiniAppProvider({ children, addMiniAppOnLoad }: MiniAppProviderP
     <MiniAppContext.Provider
       value={{
         isMiniAppReady,
+        isInMiniApp,
         setMiniAppReady,
         addMiniApp: handleAddMiniApp,
         context,

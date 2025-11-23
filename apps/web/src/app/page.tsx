@@ -30,7 +30,7 @@ const currencyFormatter = new Intl.NumberFormat("en-US", {
 });
 
 export default function Home() {
-  const { context, isMiniAppReady } = useMiniApp();
+  const { context, isMiniAppReady, isInMiniApp } = useMiniApp();
   const [isAddingMiniApp, setIsAddingMiniApp] = useState(false);
   const [addMiniAppMessage, setAddMiniAppMessage] = useState<string | null>(null);
   const [isVerifyingAssets, setIsVerifyingAssets] = useState(false);
@@ -59,15 +59,15 @@ export default function Home() {
   const { address, isConnected, isConnecting } = useAccount();
   const { connect, connectors } = useConnect();
 
-  // Auto-connect wallet when miniapp is ready
+  // Auto-connect wallet when in miniapp context (not regular web)
   useEffect(() => {
-    if (isMiniAppReady && !isConnected && !isConnecting && connectors.length > 0) {
+    if (isInMiniApp && isMiniAppReady && !isConnected && !isConnecting && connectors.length > 0) {
       const farcasterConnector = connectors.find((c) => c.id === "farcaster");
       if (farcasterConnector) {
         connect({ connector: farcasterConnector });
       }
     }
-  }, [isMiniAppReady, isConnected, isConnecting, connectors, connect]);
+  }, [isInMiniApp, isMiniAppReady, isConnected, isConnecting, connectors, connect]);
 
   // Extract user data from context
   const user = context?.user;
@@ -213,7 +213,9 @@ export default function Home() {
     setIsSubmittingWill(false);
   };
 
-  if (!isMiniAppReady) {
+  // Only show loading state if we're actually in a miniapp context
+  // Regular web users don't need to wait for miniapp initialization
+  if (isInMiniApp && !isMiniAppReady) {
     return (
       <main className="flex-1">
         <section className="flex items-center justify-center min-h-screen bg-slate-950 text-white">
