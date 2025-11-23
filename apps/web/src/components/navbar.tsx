@@ -19,7 +19,11 @@ type NavLink = {
   external?: boolean
 }
 
-const navLinks: NavLink[] = [{ name: "Home", href: "/" }]
+const navLinks: NavLink[] = [
+  { name: "Home", href: "/" },
+  { name: "Grantor", href: "/grantor" },
+  { name: "Beneficiary", href: "/beneficiary" },
+]
 
 export function Navbar() {
   const pathname = usePathname()
