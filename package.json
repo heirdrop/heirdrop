@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "Onchain succession protocol",
   "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
   "scripts": {
     "build": "turbo build",
     "dev": "turbo dev",

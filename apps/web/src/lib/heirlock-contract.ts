@@ -97,18 +97,23 @@ export async function isOwnerAlive(
   }) as boolean;
 }
 
+export type OwnerLiveliness = {
+  duration: bigint;
+  lastCheckIn: bigint;
+};
+
 export async function getOwnerLiveliness(
   owner: Address,
   rpcUrl?: string
-) {
+): Promise<OwnerLiveliness> {
   const client = getHeirlockClient(rpcUrl);
   
-  return await client.readContract({
+  return (await client.readContract({
     address: HEIRLOCK_CONTRACT_ADDRESS,
     abi: heirlockAbi as HeirlockABI,
     functionName: "getOwnerLiveliness",
     args: [owner],
-  });
+  })) as OwnerLiveliness;
 }
 
 export async function getIdentityBeneficiaries(
@@ -124,4 +129,3 @@ export async function getIdentityBeneficiaries(
     args: [owner],
   }) as `0x${string}`[];
 }
-

@@ -18,8 +18,8 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222 84% 5%;
 
-    /* lavender primary + mint accent = cyberpunk but friendly */
-    --primary: 264 83% 62%;
+    /* neon green primary */
+    --primary: 120 100% 56%;
     --primary-foreground: 210 40% 98%;
 
     --secondary: 210 40% 96%;
@@ -51,7 +51,7 @@
     --popover: 222 47% 8%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 264 83% 72%;
+    --primary: 120 100% 56%;
     --primary-foreground: 222 84% 6%;
 
     --secondary: 223 32% 18%;
