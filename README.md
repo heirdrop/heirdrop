@@ -1,5 +1,5 @@
 # Heirdrop
-
+[https://www.canva.com/design/DAG5gvc-YM0/b6ad6Qs4-40E7y3QcxQllw/edit?utm_content=DAG5gvc-YM0&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton]
 <p align="left">
   <img src="apps/web/public/icon.png" alt="Heirdrop icon" width="180" />
 </p>
