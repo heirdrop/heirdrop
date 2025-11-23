@@ -8,7 +8,7 @@ Onchain succession for multi-chain portfolios. Heirdrop packages compliant KYC, 
 
 ## Why Heirdrop
 
-Family offices and crypto-native operators need more than a cold wallet seed phrase - they need auditable, automated instructions that can be honored when someone stops responding. Heirdrop combines a battle-tested smart contract (Heirlock) with a Warpcast mini app and Self.xyz identity proofs to give operators:
+Family offices and crypto-native operators need more than a cold wallet seed phrase - they need auditable, automated instructions that can be honored when someone stops responding. Heirdrop combines a battle-tested smart contract (Heirlock) with a Warpcast - built on Celo- mini app and Self.xyz identity proofs to give operators:
 
 - **Programmable wills** that encode beneficiaries, ERC-20 allocations (absolute or BPS), and liveness windows directly on Celo.
 - **Intent-aware check-ins** that ping owners via Farcaster push so assets only move when a check-in is missed.
@@ -33,13 +33,13 @@ Family offices and crypto-native operators need more than a cold wallet seed phr
 
 ## Tech Stack
 
-| Layer            | Technologies                                                                                           |
-| ---------------- | ------------------------------------------------------------------------------------------------------ |
+| Layer            | Technologies                                                                                          |
+| ---------------- | ----------------------------------------------------------------------------------------------------- |
 | Smart contracts  | Solidity 0.8.28, Foundry, OpenZeppelin, Self.xyz Verification Root, Celo (Alfajores)                  |
-| Web experience   | Next.js 14 (App Router), React 18, TypeScript, Tailwind CSS + shadcn/ui, wagmi, RainbowKit             |
+| Web experience   | Next.js 14 (App Router), React 18, TypeScript, Tailwind CSS + shadcn/ui, wagmi, RainbowKit            |
 | Mini app surface | Farcaster Frame SDK, Farcaster mini-app Wagmi connector, Frame notifications, Warpcast manifest utils |
-| Identity & data  | Self.xyz QR builder + backend verifier, viem public clients, in-memory notification store              |
-| Tooling          | Turborepo, pnpm, Zod env validation, ESLint, Prettier/Tailwind plugins                                  |
+| Identity & data  | Self.xyz QR builder + backend verifier, viem public clients, in-memory notification store             |
+| Tooling          | Turborepo, pnpm, Zod env validation, ESLint, Prettier/Tailwind plugins                                |
 
 ## Repository Layout
 
@@ -81,19 +81,19 @@ Set `IDENTITY_VERIFICATION_HUB` and `SCOPE_SEED` in your Foundry `.env` when dep
 
 Add a `.env.local` (web) and/or `.env` (contracts) file with the variables below:
 
-| Variable                              | Purpose                                                                                          |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `NEXT_PUBLIC_URL`                     | Base URL for the Next.js app and Warpcast manifest (use ngrok URL when testing mini apps).       |
-| `NEXT_PUBLIC_NGROK_URL`               | Optional override so `/api/auth/self/verify` matches your public tunnel during development.      |
-| `NEXT_PUBLIC_APP_ENV`                 | `development` or `production` toggle used for Farcaster manifest validation.                     |
-| `NEXT_PUBLIC_FARCASTER_HEADER`        | Signed account association header from Warpcast (see `FARCASTER_SETUP.md`).                      |
-| `NEXT_PUBLIC_FARCASTER_PAYLOAD`       | Matching payload for the account association.                                                    |
-| `NEXT_PUBLIC_FARCASTER_SIGNATURE`     | Matching signature for the account association.                                                  |
-| `NEXT_PUBLIC_HEIRLOCK_CONTRACT_ADDRESS` | Deployed Heirlock contract address (defaults to a placeholder).                                 |
-| `CELO_RPC_URL`                        | Optional custom RPC endpoint for the viem public client (defaults to Alfajores Forno).           |
-| `SELF_SCOPE_SEED` / `SCOPE_SEED`      | Scope seed shared between Self QR builder (frontend) and verifier (backend + Foundry scripts).   |
-| `IDENTITY_VERIFICATION_HUB`           | Self.xyz hub contract address referenced by Foundry deploy/test scripts.                         |
-| `JWT_SECRET`                          | Secret for Farcaster quick-auth endpoints if you enable authenticated API routes.                |
+| Variable                                | Purpose                                                                                        |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_URL`                       | Base URL for the Next.js app and Warpcast manifest (use ngrok URL when testing mini apps).     |
+| `NEXT_PUBLIC_NGROK_URL`                 | Optional override so `/api/auth/self/verify` matches your public tunnel during development.    |
+| `NEXT_PUBLIC_APP_ENV`                   | `development` or `production` toggle used for Farcaster manifest validation.                   |
+| `NEXT_PUBLIC_FARCASTER_HEADER`          | Signed account association header from Warpcast (see `FARCASTER_SETUP.md`).                    |
+| `NEXT_PUBLIC_FARCASTER_PAYLOAD`         | Matching payload for the account association.                                                  |
+| `NEXT_PUBLIC_FARCASTER_SIGNATURE`       | Matching signature for the account association.                                                |
+| `NEXT_PUBLIC_HEIRLOCK_CONTRACT_ADDRESS` | Deployed Heirlock contract address (defaults to a placeholder).                                |
+| `CELO_RPC_URL`                          | Optional custom RPC endpoint for the viem public client (defaults to Alfajores Forno).         |
+| `SELF_SCOPE_SEED` / `SCOPE_SEED`        | Scope seed shared between Self QR builder (frontend) and verifier (backend + Foundry scripts). |
+| `IDENTITY_VERIFICATION_HUB`             | Self.xyz hub contract address referenced by Foundry deploy/test scripts.                       |
+| `JWT_SECRET`                            | Secret for Farcaster quick-auth endpoints if you enable authenticated API routes.              |
 
 > Need help with Warpcast onboarding? Follow `FARCASTER_SETUP.md` for manifest signing, ngrok tips, and troubleshooting steps.
 
