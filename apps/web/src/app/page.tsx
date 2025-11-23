@@ -217,11 +217,11 @@ export default function Home() {
   // Regular web users don't need to wait for miniapp initialization
   if (isInMiniApp && !isMiniAppReady) {
     return (
-      <main className="flex-1">
-        <section className="flex items-center justify-center min-h-screen bg-slate-950 text-white">
+      <main className="flex-1 bg-background text-foreground">
+        <section className="flex min-h-screen items-center justify-center">
           <div className="w-full max-w-md mx-auto p-8 text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-400 mx-auto mb-4"></div>
-            <p className="text-sm text-slate-300">Preparing Heirlock...</p>
+            <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-b-2 border-primary"></div>
+            <p className="text-sm text-muted-foreground">Preparing Heirlock...</p>
           </div>
         </section>
       </main>
@@ -229,41 +229,45 @@ export default function Home() {
   }
 
   return (
-    <main className="flex-1 bg-slate-950 text-slate-100">
-      <div className="max-w-5xl mx-auto px-4 py-10 space-y-10">
-        <section className="rounded-3xl bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-900 p-8 shadow-xl border border-white/5">
+    <main className="flex-1 bg-background text-foreground">
+      <div className="mx-auto max-w-5xl space-y-10 px-4 py-10">
+        <section className="rounded-3xl border border-border bg-gradient-to-br from-primary/20 via-card to-secondary/20 p-8 shadow-xl">
           <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
             <div className="space-y-4">
-              <p className="text-xs uppercase tracking-[0.3em] text-indigo-300">
+              <p className="text-xs uppercase tracking-[0.3em] text-primary">
                 Onchain succession protocol
               </p>
-              <h1 className="text-4xl font-semibold text-white">
+              <h1 className="text-4xl font-semibold text-foreground">
                 Heirdrop keeps your assets in motion
               </h1>
-              <p className="text-base text-slate-300">
+              <p className="text-base text-muted-foreground">
                 Configure a will, ask the protocol to ping you, and release assets to the
                 right beneficiaries only when you miss a check-in. Your statement of intent, list of
                 heirs, and ERC-20 allocations are enforced by the Heirlock smart contract.
               </p>
-              <div className="grid gap-4 text-sm text-slate-200 sm:grid-cols-3">
-                <div className="rounded-xl border border-white/10 p-4">
-                  <p className="text-xs text-slate-400 mb-1">Liveness Checks</p>
-                  <p className="text-lg font-semibold">{timePeriodDays || "30"} day cadence</p>
+              <div className="grid gap-4 text-sm text-muted-foreground sm:grid-cols-3">
+                <div className="rounded-xl border border-border/60 bg-card/80 p-4">
+                  <p className="mb-1 text-xs text-muted-foreground">Liveness Checks</p>
+                  <p className="text-lg font-semibold text-foreground">
+                    {timePeriodDays || "30"} day cadence
+                  </p>
                 </div>
-                <div className="rounded-xl border border-white/10 p-4">
-                  <p className="text-xs text-slate-400 mb-1">Beneficiaries</p>
-                  <p className="text-lg font-semibold">{beneficiaries.length} configured</p>
+                <div className="rounded-xl border border-border/60 bg-card/80 p-4">
+                  <p className="mb-1 text-xs text-muted-foreground">Beneficiaries</p>
+                  <p className="text-lg font-semibold text-foreground">
+                    {beneficiaries.length} configured
+                  </p>
                 </div>
-                <div className="rounded-xl border border-white/10 p-4">
-                  <p className="text-xs text-slate-400 mb-1">Total Holdings</p>
-                  <p className="text-lg font-semibold">
+                <div className="rounded-xl border border-border/60 bg-card/80 p-4">
+                  <p className="mb-1 text-xs text-muted-foreground">Total Holdings</p>
+                  <p className="text-lg font-semibold text-foreground">
                     {currencyFormatter.format(totalFiatValue)}
                   </p>
                 </div>
               </div>
             </div>
-            <div className="rounded-2xl bg-white/5 p-6 text-center w-full md:max-w-xs border border-white/10">
-              <div className="mx-auto mb-4 h-20 w-20 overflow-hidden rounded-full border border-white/20 bg-slate-800">
+            <div className="w-full rounded-2xl border border-border bg-card/80 p-6 text-center md:max-w-xs">
+              <div className="mx-auto mb-4 h-20 w-20 overflow-hidden rounded-full border border-border/70 bg-muted">
                 {pfpUrl ? (
                   <img src={pfpUrl} alt="Profile" className="h-full w-full object-cover" />
                 ) : (
@@ -272,12 +276,12 @@ export default function Home() {
                   </div>
                 )}
               </div>
-              <h2 className="text-xl font-semibold text-white">{displayName}</h2>
-              <p className="text-sm text-slate-400">
+              <h2 className="text-xl font-semibold text-foreground">{displayName}</h2>
+              <p className="text-sm text-muted-foreground">
                 {username.startsWith("@") ? username : `@${username}`}
               </p>
-              <div className="mt-4 text-xs text-slate-400">
-                <p className="font-mono text-sm text-white">{formatAddress(walletAddress)}</p>
+              <div className="mt-4 text-xs text-muted-foreground">
+                <p className="font-mono text-sm text-foreground">{formatAddress(walletAddress)}</p>
                 <p className="mt-1">
                   {isConnected
                     ? "Wallet connected via Farcaster"
@@ -291,19 +295,19 @@ export default function Home() {
         </section>
 
         <section className="grid gap-6 md:grid-cols-2">
-          <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-6">
+          <div className="rounded-2xl border border-border bg-card/70 p-6">
             <div className="flex items-center justify-between">
-              <h3 className="text-xl font-semibold text-white">Cross-chain assets</h3>
+              <h3 className="text-xl font-semibold text-foreground">Cross-chain assets</h3>
               <span
                 className={`text-xs ${
-                  isConnected ? "text-green-400" : "text-slate-500"
+                  isConnected ? "text-accent" : "text-muted-foreground"
                 } flex items-center gap-2`}
               >
                 <span className="h-2 w-2 rounded-full bg-current" />
                 {isConnected ? "Connected" : "Connect wallet"}
               </span>
             </div>
-            <p className="mt-2 text-sm text-slate-400">
+            <p className="mt-2 text-sm text-muted-foreground">
               Heirlock indexes balances from every supported EVM chain to build a unified inventory
               of your estate. Choose which assets go into each beneficiary&apos;s allocation.
             </p>
@@ -311,22 +315,23 @@ export default function Home() {
               {assets.map((asset) => (
                 <div
                   key={asset.id}
-                  className="flex items-center justify-between rounded-xl border border-white/5 bg-slate-900/80 px-4 py-3"
+                  className="flex items-center justify-between rounded-xl border border-border/60 bg-card/80 px-4 py-3"
                 >
                   <div>
-                    <p className="text-sm font-semibold text-white">
-                      {asset.symbol} <span className="text-xs text-slate-400">· {asset.chain}</span>
+                    <p className="text-sm font-semibold text-foreground">
+                      {asset.symbol}{" "}
+                      <span className="text-xs text-muted-foreground">· {asset.chain}</span>
                     </p>
-                    <p className="text-xs text-slate-400">
+                    <p className="text-xs text-muted-foreground">
                       {asset.category === "native" ? "Native" : "ERC-20"}{" "}
                       {asset.address && `• ${asset.address}`}
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-semibold text-white">
+                    <p className="text-sm font-semibold text-foreground">
                       {asset.balance.toFixed(2)}
                     </p>
-                    <p className="text-xs text-slate-400">
+                    <p className="text-xs text-muted-foreground">
                       {currencyFormatter.format(asset.fiatValue)}
                     </p>
                   </div>
@@ -334,12 +339,12 @@ export default function Home() {
               ))}
             </div>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-6">
-            <h3 className="text-xl font-semibold text-white">Verification</h3>
-            <p className="mt-2 text-sm text-slate-400">
+          <div className="rounded-2xl border border-border bg-card/70 p-6">
+            <h3 className="text-xl font-semibold text-foreground">Verification</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
               Before activating a will, confirm that your balances and token approvals are synced
               with the Heirlock contract. This triggers allowance checks similar to
-              <code className="mx-1 rounded bg-slate-800 px-1 py-0.5 text-[10px] uppercase tracking-wide">
+              <code className="mx-1 rounded bg-muted px-1 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
                 _validateApprovals
               </code>
               inside the Solidity code.
@@ -347,16 +352,18 @@ export default function Home() {
             <button
               onClick={handleVerifyHoldings}
               disabled={isVerifyingAssets}
-              className="mt-6 w-full rounded-xl bg-indigo-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:bg-indigo-400"
+              className="mt-6 w-full rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-primary/70"
             >
               {isVerifyingAssets ? "Verifying..." : "Verify my holdings"}
             </button>
-            <div className="mt-4 rounded-xl border border-white/10 bg-slate-900/80 p-4 text-sm text-slate-300">
+            <div className="mt-4 rounded-xl border border-border/60 bg-card/80 p-4 text-sm text-muted-foreground">
               {verificationMessage ? (
                 <>
                   <p>{verificationMessage}</p>
                   {lastVerification && (
-                    <p className="text-xs text-slate-500 mt-1">Last updated · {lastVerification}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Last updated · {lastVerification}
+                    </p>
                   )}
                 </>
               ) : (
@@ -366,35 +373,42 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="rounded-3xl border border-white/10 bg-slate-900/80 p-8">
+        <section className="rounded-3xl border border-border bg-card/80 p-8">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <h3 className="text-2xl font-semibold text-white">Draft your will</h3>
-              <p className="text-sm text-slate-400">
+              <h3 className="text-2xl font-semibold text-foreground">Draft your will</h3>
+              <p className="text-sm text-muted-foreground">
                 Configure the liveness check window, articulate your intent, and map assets to
-                heirs. This mirrors the <code className="rounded bg-slate-800 px-1">createWill</code>{" "}
-                and <code className="rounded bg-slate-800 px-1">configureLiveness</code> calls in the
+                heirs. This mirrors the{" "}
+                <code className="rounded bg-muted px-1 text-xs uppercase tracking-wide">
+                  createWill
+                </code>{" "}
+                and{" "}
+                <code className="rounded bg-muted px-1 text-xs uppercase tracking-wide">
+                  configureLiveness
+                </code>{" "}
+                calls in the
                 Heirlock contract.
               </p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-center">
-              <p className="text-xs uppercase tracking-wide text-slate-400">Owner</p>
-              <p className="font-mono text-sm text-white">{formatAddress(walletAddress)}</p>
+            <div className="rounded-2xl border border-border bg-card/70 px-4 py-3 text-center">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Owner</p>
+              <p className="font-mono text-sm text-foreground">{formatAddress(walletAddress)}</p>
             </div>
           </div>
 
           <form className="mt-8 space-y-8" onSubmit={handleWillCreation}>
             <div className="grid gap-6 md:grid-cols-2">
-              <label className="flex flex-col gap-2 text-sm font-medium text-slate-200">
+              <label className="flex flex-col gap-2 text-sm font-medium text-foreground">
                 Personal note to heirs
                 <textarea
                   value={personalNote}
                   onChange={(event) => setPersonalNote(event.target.value)}
-                  className="min-h-[120px] rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
+                  className="min-h-[120px] rounded-2xl border border-border bg-card/60 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
                   placeholder="Tell your beneficiaries what this vault represents and how to treat it."
                 />
               </label>
-              <label className="flex flex-col gap-2 text-sm font-medium text-slate-200">
+              <label className="flex flex-col gap-2 text-sm font-medium text-foreground">
                 Check-in cadence (days)
                 <input
                   type="number"
@@ -402,25 +416,26 @@ export default function Home() {
                   inputMode="numeric"
                   value={timePeriodDays}
                   onChange={(event) => setTimePeriodDays(event.target.value)}
-                  className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
+                  className="rounded-2xl border border-border bg-card/60 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
                   placeholder="30"
                 />
-                <span className="text-xs font-normal text-slate-500">
+                <span className="text-xs font-normal text-muted-foreground">
                   Heirlock will call{" "}
-                  <code className="rounded bg-slate-800 px-1">checkIn()</code> on your behalf before
-                 {" "}
-                  {Math.max(1, Number(timePeriodDays) || 1)} days lapse.
+                  <code className="rounded bg-muted px-1 text-[10px] uppercase tracking-wide">
+                    checkIn()
+                  </code>{" "}
+                  on your behalf before {Math.max(1, Number(timePeriodDays) || 1)} days lapse.
                 </span>
               </label>
             </div>
 
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-white">Beneficiaries</p>
+                <p className="text-sm font-semibold text-foreground">Beneficiaries</p>
                 <button
                   type="button"
                   onClick={addBeneficiaryRow}
-                  className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold text-white hover:border-indigo-400"
+                  className="rounded-full border border-border px-4 py-2 text-xs font-semibold text-foreground transition hover:border-primary hover:text-primary"
                 >
                   + Add beneficiary
                 </button>
@@ -430,48 +445,48 @@ export default function Home() {
                 {beneficiaries.map((entry, index) => (
                   <div
                     key={entry.id}
-                    className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 space-y-4"
+                    className="space-y-4 rounded-2xl border border-border bg-card/60 p-4"
                   >
                     <div className="flex items-center justify-between">
-                      <p className="text-sm font-semibold text-white">
+                      <p className="text-sm font-semibold text-foreground">
                         {entry.label || `Beneficiary ${index + 1}`}
                       </p>
                       {beneficiaries.length > 1 && (
                         <button
                           type="button"
                           onClick={() => removeBeneficiary(entry.id)}
-                          className="text-xs text-rose-300 hover:text-rose-200"
+                          className="text-xs text-destructive hover:text-destructive/80"
                         >
                           Remove
                         </button>
                       )}
                     </div>
                     <div className="grid gap-4 md:grid-cols-2">
-                      <label className="flex flex-col gap-1 text-xs font-semibold text-slate-300">
+                      <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
                         Wallet address
                         <input
                           value={entry.wallet}
                           onChange={(event) =>
                             updateBeneficiary(entry.id, "wallet", event.target.value)
                           }
-                          className="rounded-xl border border-white/10 bg-slate-900/80 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
+                          className="rounded-xl border border-border bg-card/70 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
                           placeholder="0x..."
                         />
                       </label>
-                      <label className="flex flex-col gap-1 text-xs font-semibold text-slate-300">
+                      <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
                         Asset address (ERC-20)
                         <input
                           value={entry.assetAddress}
                           onChange={(event) =>
                             updateBeneficiary(entry.id, "assetAddress", event.target.value)
                           }
-                          className="rounded-xl border border-white/10 bg-slate-900/80 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
+                          className="rounded-xl border border-border bg-card/70 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
                           placeholder="0x..."
                         />
                       </label>
                     </div>
                     <div className="grid gap-4 md:grid-cols-3">
-                      <label className="flex flex-col gap-1 text-xs font-semibold text-slate-300">
+                      <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
                         Share type
                         <select
                           value={entry.shareType}
@@ -482,20 +497,20 @@ export default function Home() {
                               event.target.value as BeneficiaryEntry["shareType"]
                             )
                           }
-                          className="rounded-xl border border-white/10 bg-slate-900/80 px-3 py-2 text-sm text-white focus:border-indigo-400 focus:outline-none"
+                          className="rounded-xl border border-border bg-card/70 px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
                         >
                           <option value="ABSOLUTE">Absolute amount</option>
                           <option value="BPS">BPS (0-10000)</option>
                         </select>
                       </label>
-                      <label className="flex flex-col gap-1 text-xs font-semibold text-slate-300 md:col-span-2">
+                      <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground md:col-span-2">
                         Share amount
                         <input
                           value={entry.shareAmount}
                           onChange={(event) =>
                             updateBeneficiary(entry.id, "shareAmount", event.target.value)
                           }
-                          className="rounded-xl border border-white/10 bg-slate-900/80 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
+                          className="rounded-xl border border-border bg-card/70 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
                           placeholder={entry.shareType === "BPS" ? "1000 = 10%" : "1000 tokens"}
                         />
                       </label>
@@ -509,17 +524,17 @@ export default function Home() {
               <button
                 type="submit"
                 disabled={isSubmittingWill}
-                className="w-full rounded-2xl bg-emerald-500 px-6 py-4 text-sm font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-400"
+                className="w-full rounded-2xl bg-accent px-6 py-4 text-sm font-semibold text-accent-foreground transition hover:bg-accent/90 disabled:cursor-not-allowed disabled:bg-accent/60"
               >
                 {isSubmittingWill ? "Compiling payload..." : "Create Heirlock will"}
               </button>
               {willStatusMessage && (
-                <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+                <div className="rounded-2xl border border-accent/40 bg-accent/10 px-4 py-3 text-sm text-accent">
                   {willStatusMessage}
                 </div>
               )}
               {payloadPreview && (
-                <pre className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/70 p-4 text-xs text-slate-300">
+                <pre className="overflow-auto rounded-2xl border border-border bg-card/70 p-4 text-xs text-muted-foreground">
                   {JSON.stringify(payloadPreview, null, 2)}
                 </pre>
               )}
@@ -528,13 +543,13 @@ export default function Home() {
         </section>
 
         {/* Self Verification Test Section */}
-        <section className="rounded-3xl border border-indigo-500/30 bg-gradient-to-br from-indigo-900/20 via-slate-900/80 to-slate-900/80 p-8">
+        <section className="rounded-3xl border border-primary/30 bg-gradient-to-br from-primary/10 via-card to-background p-8">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-3">
-                <div className="h-10 w-10 rounded-lg bg-indigo-500/20 flex items-center justify-center">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/15">
                   <svg
-                    className="h-5 w-5 text-indigo-400"
+                    className="h-5 w-5 text-primary"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -547,30 +562,30 @@ export default function Home() {
                     />
                   </svg>
                 </div>
-                <h3 className="text-2xl font-semibold text-white">
+                <h3 className="text-2xl font-semibold text-foreground">
                   Identity Verification Testing
                 </h3>
               </div>
-              <p className="text-sm text-slate-300 mb-4">
+              <p className="mb-4 text-sm text-muted-foreground">
                 Test the Self.xyz identity verification integration that powers identity-verified 
                 beneficiaries in the Heirlock contract. This allows you to create wills for 
                 beneficiaries identified by their real-world identity (name and date of birth) 
                 instead of just wallet addresses.
               </p>
               <div className="flex flex-wrap gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-500/10 px-3 py-1 text-xs font-medium text-indigo-300 border border-indigo-500/20">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
                   <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 8 8">
                     <circle cx="4" cy="4" r="3" />
                   </svg>
                   Zero-knowledge proofs
                 </span>
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-500/10 px-3 py-1 text-xs font-medium text-indigo-300 border border-indigo-500/20">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
                   <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 8 8">
                     <circle cx="4" cy="4" r="3" />
                   </svg>
                   Privacy-preserving
                 </span>
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-500/10 px-3 py-1 text-xs font-medium text-indigo-300 border border-indigo-500/20">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
                   <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 8 8">
                     <circle cx="4" cy="4" r="3" />
                   </svg>
@@ -581,7 +596,7 @@ export default function Home() {
             <div className="flex flex-col gap-3 w-full md:w-auto">
               <a
                 href="/verify"
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-indigo-400 shadow-lg shadow-indigo-500/20"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 shadow-lg shadow-primary/30"
               >
                 <svg
                   className="h-5 w-5"
@@ -598,16 +613,16 @@ export default function Home() {
                 </svg>
                 Test Self Verification
               </a>
-              <p className="text-xs text-center text-slate-500">
+              <p className="text-center text-xs text-muted-foreground">
                 Scan QR code with Self app
               </p>
             </div>
           </div>
           
-          <div className="mt-6 rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+          <div className="mt-6 rounded-2xl border border-border bg-card/70 p-4">
             <div className="flex items-start gap-3">
               <svg
-                className="h-5 w-5 text-blue-400 mt-0.5 flex-shrink-0"
+                className="mt-0.5 h-5 w-5 flex-shrink-0 text-primary"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -620,18 +635,18 @@ export default function Home() {
                 />
               </svg>
               <div className="flex-1">
-                <p className="text-xs font-semibold text-white mb-1">
+                <p className="mb-1 text-xs font-semibold text-foreground">
                   How it works with Heirlock
                 </p>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-muted-foreground">
                   When you create an identity-verified will using{" "}
-                  <code className="rounded bg-slate-800 px-1 text-[10px]">
+                  <code className="rounded bg-muted px-1 text-[10px] uppercase tracking-wide">
                     createIdentityWill()
                   </code>
                   , the contract stores a hash of the beneficiary's identity (first name, 
                   last name, date of birth). When they claim, they prove their identity 
                   through Self.xyz, and the contract's{" "}
-                  <code className="rounded bg-slate-800 px-1 text-[10px]">
+                  <code className="rounded bg-muted px-1 text-[10px] uppercase tracking-wide">
                     customVerificationHook()
                   </code>{" "}
                   verifies the match and releases the assets.
