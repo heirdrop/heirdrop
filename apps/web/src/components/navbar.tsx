@@ -13,10 +13,13 @@ import {
 } from "@/components/ui/sheet"
 import { WalletConnectButton } from "@/components/connect-button"
 
-const navLinks = [
-  { name: "Home", href: "/" },
-  { name: "Docs", href: "https://docs.celo.org", external: true },
-]
+type NavLink = {
+  name: string
+  href: string
+  external?: boolean
+}
+
+const navLinks: NavLink[] = [{ name: "Home", href: "/" }]
 
 export function Navbar() {
   const pathname = usePathname()
@@ -34,10 +37,19 @@ export function Navbar() {
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="w-80">
-              <div className="flex items-center gap-2 mb-8">
-
-                <span className="font-bold text-lg">
-                  heirdrop
+              <div className="mb-8 flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-card/70">
+                  <Image
+                    src="/icon.png"
+                    alt="Heirdrop logo"
+                    width={28}
+                    height={28}
+                    className="h-7 w-7"
+                    priority
+                  />
+                </div>
+                <span className="text-lg font-semibold tracking-wide text-foreground">
+                  Heirdrop
                 </span>
               </div>
               <nav className="flex flex-col gap-4">
@@ -47,8 +59,8 @@ export function Navbar() {
                     href={link.href}
                     target={link.external ? "_blank" : undefined}
                     rel={link.external ? "noopener noreferrer" : undefined}
-                    className={`flex items-center gap-2 text-base font-medium transition-colors hover:text-primary ${
-                      pathname === link.href ? "text-foreground" : "text-foreground/70"
+                    className={`flex items-center gap-2 text-base font-semibold tracking-wide transition-colors hover:text-primary ${
+                      pathname === link.href ? "text-foreground" : "text-muted-foreground"
                     }`}
                   >
                     {link.name}
@@ -63,10 +75,23 @@ export function Navbar() {
           </Sheet>
 
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-
-            <span className="hidden font-bold text-xl sm:inline-block">
-              heirdrop
+          <Link
+            href="/"
+            className="flex items-center gap-3 rounded-full border border-border/60 bg-card/60 px-3 py-1.5 transition hover:border-primary/60 hover:text-primary"
+            aria-label="Heirdrop Home"
+          >
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10">
+              <Image
+                src="/icon.png"
+                alt="Heirdrop logo"
+                width={24}
+                height={24}
+                className="h-6 w-6"
+                priority
+              />
+            </div>
+            <span className="hidden text-lg font-semibold tracking-wide sm:inline-block">
+              Heirdrop
             </span>
           </Link>
         </div>
@@ -79,10 +104,8 @@ export function Navbar() {
               href={link.href}
               target={link.external ? "_blank" : undefined}
               rel={link.external ? "noopener noreferrer" : undefined}
-              className={`flex items-center gap-1.5 text-sm font-medium transition-colors hover:text-primary ${
-                pathname === link.href
-                  ? "text-foreground"
-                  : "text-foreground/70"
+              className={`flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.2em] transition-colors hover:text-primary ${
+                pathname === link.href ? "text-foreground" : "text-muted-foreground"
               }`}
             >
               {link.name}
