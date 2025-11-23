@@ -1,4 +1,5 @@
 "use client";
+import { HeartbeatLiveness } from "@/components/heartbeat-liveness";
 import { useMiniApp } from "@/contexts/miniapp-context";
 import { sdk } from "@farcaster/frame-sdk";
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -294,6 +295,8 @@ export default function Home() {
             </div>
           </div>
         </section>
+
+        <HeartbeatLiveness ownerAddress={walletAddress} />
 
         <section className="grid gap-6 md:grid-cols-2">
           <div className="rounded-2xl border border-border bg-card/70 p-6">
