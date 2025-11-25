@@ -5,11 +5,13 @@ import heirlockAbi from "@/lib/heirlock-abi.json";
 import { HEIRLOCK_CONTRACT_ADDRESS } from "@/lib/heirlock-contract";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { BaseError, isAddress } from "viem";
-import { useAccount, useConnect, usePublicClient, useWriteContract } from "wagmi";
+import { useAccount, useChainId, useConnect, usePublicClient, useSwitchChain, useWriteContract } from "wagmi";
+import { celoSepolia } from "wagmi/chains";
 
 type AssetHolding = {
   id: string;
   chain: string;
+  chainId?: number;
   symbol: string;
   balance: number;
   fiatValue: number;
@@ -24,6 +26,7 @@ type BeneficiaryEntry = {
   wallet: string;
   fullName: string;
   birthDate: string;
+  assetId?: string;
   assetAddress: string;
   shareType: "ABSOLUTE" | "BPS";
   shareAmount: string;
@@ -55,6 +58,11 @@ type PreparedInstruction = {
     claimed: boolean;
   };
   shareTypeLabel: BeneficiaryEntry["shareType"];
+};
+
+type AssetVerificationState = {
+  status: "idle" | "pending" | "verified" | "error";
+  note?: string;
 };
 
 function formatBirthDate(dateValue: string) {
@@ -94,6 +102,27 @@ function parseShareValue(value: string) {
   return BigInt(trimmed);
 }
 
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function resolveAssetAddress(
+  entry: BeneficiaryEntry,
+  assetMap: Record<string, AssetHolding>
+) {
+  const manual = entry.assetAddress?.trim();
+  if (manual) {
+    return manual;
+  }
+  if (entry.assetId) {
+    const candidate = assetMap[entry.assetId]?.address?.trim();
+    if (candidate) {
+      return candidate;
+    }
+  }
+  return "";
+}
+
 function formatContractError(error: unknown) {
   if (error instanceof BaseError && error.shortMessage) {
     return error.shortMessage;
@@ -106,10 +135,11 @@ function formatContractError(error: unknown) {
 
 export default function Grantor() {
   const { context, isMiniAppReady, isInMiniApp } = useMiniApp();
-  const [isVerifyingAssets, setIsVerifyingAssets] = useState(false);
-  const [lastVerification, setLastVerification] = useState<string | null>(null);
-  const [verificationMessage, setVerificationMessage] = useState<string | null>(null);
+  const [isSavingCadence, setIsSavingCadence] = useState(false);
+  const [lastCadenceUpdate, setLastCadenceUpdate] = useState<string | null>(null);
+  const [cadenceMessage, setCadenceMessage] = useState<string | null>(null);
   const [assets, setAssets] = useState<AssetHolding[]>([]);
+  const [assetVerification, setAssetVerification] = useState<Record<string, AssetVerificationState>>({});
   const [personalNote, setPersonalNote] = useState(
     "If I miss my check-in window, please initiate the transfer exactly as I've described below."
   );
@@ -122,6 +152,7 @@ export default function Grantor() {
       wallet: "",
       fullName: "",
       birthDate: "",
+      assetId: undefined,
       assetAddress: "",
       shareType: "BPS",
       shareAmount: "2500",
@@ -133,12 +164,18 @@ export default function Grantor() {
   const [heartbeatRefreshKey, setHeartbeatRefreshKey] = useState(0);
   const [isCheckingIn, setIsCheckingIn] = useState(false);
   const [checkInMessage, setCheckInMessage] = useState<string | null>(null);
+  const [connectError, setConnectError] = useState<string | null>(null);
+  const [connectingConnectorId, setConnectingConnectorId] = useState<string | null>(null);
 
   // Wallet connection hooks
   const { address, isConnected, isConnecting } = useAccount();
   const { connect, connectors } = useConnect();
+  const chainId = useChainId();
+  const { switchChainAsync, isPending: isSwitchingChain } = useSwitchChain();
   const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
+  const targetChain = celoSepolia;
+  const isOnTargetChain = chainId === targetChain.id;
 
   // Auto-connect wallet when in miniapp context (not regular web)
   useEffect(() => {
@@ -156,12 +193,112 @@ export default function Grantor() {
   const walletAddress =
     address || user?.custody || user?.verifications?.[0] || "0x1e4B...605B";
 
+  const availableConnectors = useMemo(
+    () =>
+      connectors.filter((connector) =>
+        connector.id === "farcaster" ? isInMiniApp : true
+      ),
+    [connectors, isInMiniApp]
+  );
+  const needsNetworkSwitch = isConnected && !isOnTargetChain;
+  const assetMap = useMemo(() => {
+    return assets.reduce<Record<string, AssetHolding>>((map, asset) => {
+      map[asset.id] = asset;
+      return map;
+    }, {});
+  }, [assets]);
+  const verifiedAssets = useMemo(
+    () => assets.filter((asset) => assetVerification[asset.id]?.status === "verified"),
+    [assets, assetVerification]
+  );
+  const verifiedAssetCount = verifiedAssets.length;
+  const totalFiatValue = useMemo(
+    () => assets.reduce((sum, asset) => sum + asset.fiatValue, 0),
+    [assets]
+  );
+  const verifiedFiatValue = useMemo(
+    () => verifiedAssets.reduce((sum, asset) => sum + asset.fiatValue, 0),
+    [verifiedAssets]
+  );
+  const totalChainCount = useMemo(() => new Set(assets.map((asset) => asset.chain)).size, [assets]);
+  const verifiedChainCount = useMemo(
+    () => new Set(verifiedAssets.map((asset) => asset.chain)).size,
+    [verifiedAssets]
+  );
+  const holdingsCoverage = totalFiatValue
+    ? Math.min(100, Math.round((verifiedFiatValue / totalFiatValue) * 100))
+    : 0;
+
   const formatAddress = (addr: string) => {
     if (!addr || addr.length < 10) return addr;
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
   const refreshHeartbeat = () => setHeartbeatRefreshKey((current) => current + 1);
+  const ensureTargetChain = async () => {
+    if (isOnTargetChain) {
+      return;
+    }
+    if (!switchChainAsync) {
+      throw new Error("Switch your wallet network to Celo Sepolia.");
+    }
+    await switchChainAsync({ chainId: targetChain.id });
+  };
+  const handleConnectWallet = async (connectorId: string) => {
+    setConnectError(null);
+    setConnectingConnectorId(connectorId);
+    try {
+      const connector = availableConnectors.find((entry) => entry.id === connectorId);
+      if (!connector) {
+        throw new Error("Connector unavailable in this environment.");
+      }
+      await connect({ connector });
+    } catch (error) {
+      setConnectError(formatContractError(error));
+    } finally {
+      setConnectingConnectorId(null);
+    }
+  };
+  const handleEnsureNetwork = async () => {
+    setConnectError(null);
+    try {
+      await ensureTargetChain();
+    } catch (error) {
+      setConnectError(formatContractError(error));
+    }
+  };
+
+  const handleVerifyAsset = async (asset: AssetHolding) => {
+    setAssetVerification((current) => ({
+      ...current,
+      [asset.id]: {
+        status: "pending",
+        note: `Confirming ${asset.chain} balance...`,
+      },
+    }));
+    try {
+      if (!isConnected || !address) {
+        throw new Error("Connect your wallet before verifying holdings.");
+      }
+      await ensureTargetChain();
+      await wait(600);
+      setAssetVerification((current) => ({
+        ...current,
+        [asset.id]: {
+          status: "verified",
+          note: `Added ${asset.symbol} from ${asset.chain}`,
+        },
+      }));
+    } catch (error) {
+      setAssetVerification((current) => ({
+        ...current,
+        [asset.id]: {
+          status: "error",
+          note: formatContractError(error),
+        },
+      }));
+    }
+  };
 
   // mock holdings anchored by connected wallet
   useEffect(() => {
@@ -170,51 +307,73 @@ export default function Grantor() {
     const dynamicFactor = normalized.charCodeAt(2) % 5;
     const sample: AssetHolding[] = [
       {
-        id: "eth",
+        id: "eth-mainnet",
         chain: "Ethereum",
+        chainId: 1,
         symbol: "ETH",
         balance: 1.87 + dynamicFactor * 0.13,
         fiatValue: 1.87 * 3200 + dynamicFactor * 150,
         category: "native",
+        address: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
       },
       {
-        id: "usdc",
+        id: "base-usdc",
         chain: "Base",
+        chainId: 8453,
         symbol: "USDC",
         balance: 12500 + dynamicFactor * 320,
         fiatValue: 12500 + dynamicFactor * 320,
         category: "erc20",
-        address: "0xA0b8...6eB48",
+        address: "0x833589fCd6eDb6Aad95d5baae5c2F9B3C6a3cB72",
       },
       {
-        id: "celo",
+        id: "celo-native",
         chain: "Celo",
+        chainId: targetChain.id,
         symbol: "CELO",
         balance: 480.12 + dynamicFactor * 8,
-        fiatValue: 480.12 * 0.85,
+        fiatValue: (480.12 + dynamicFactor * 8) * 0.85,
         category: "native",
+        address: "0x471EcE3750Da237f93B8E339c536989b8978a438",
       },
       {
-        id: "dai",
+        id: "polygon-dai",
         chain: "Polygon",
+        chainId: 137,
         symbol: "DAI",
         balance: 3000 + dynamicFactor * 45,
         fiatValue: 3000 + dynamicFactor * 45,
         category: "erc20",
-        address: "0x6B17...271d0",
+        address: "0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063",
       },
     ];
     setAssets(sample);
   }, [walletAddress]);
 
-  const totalFiatValue = useMemo(
-    () => assets.reduce((sum, asset) => sum + asset.fiatValue, 0),
-    [assets]
-  );
+  useEffect(() => {
+    setAssetVerification((current) => {
+      const next: Record<string, AssetVerificationState> = { ...current };
+      let changed = false;
+      const ids = new Set(assets.map((asset) => asset.id));
+      assets.forEach((asset) => {
+        if (!next[asset.id]) {
+          next[asset.id] = { status: "idle" };
+          changed = true;
+        }
+      });
+      Object.keys(next).forEach((assetId) => {
+        if (!ids.has(assetId)) {
+          delete next[assetId];
+          changed = true;
+        }
+      });
+      return changed ? next : current;
+    });
+  }, [assets]);
 
-  const handleVerifyHoldings = async () => {
-    setIsVerifyingAssets(true);
-    setVerificationMessage(null);
+  const handleSaveCadence = async () => {
+    setIsSavingCadence(true);
+    setCadenceMessage(null);
     try {
       if (!isConnected || !address) {
         throw new Error("Connect your wallet before configuring liveness.");
@@ -222,6 +381,7 @@ export default function Grantor() {
       if (!publicClient) {
         throw new Error("Wallet client is not ready yet. Please retry.");
       }
+      await ensureTargetChain();
       const durationDays = Math.max(1, Number(timePeriodDays) || 1);
       const durationSeconds = BigInt(durationDays * 24 * 60 * 60);
       const hash = await writeContractAsync({
@@ -233,13 +393,13 @@ export default function Grantor() {
 
       await publicClient.waitForTransactionReceipt({ hash });
       const timestamp = new Date().toLocaleTimeString();
-      setLastVerification(timestamp);
-      setVerificationMessage("Liveness cadence saved on Heirlock.");
+      setLastCadenceUpdate(timestamp);
+      setCadenceMessage("Cadence recorded on the Heirlock contract.");
       refreshHeartbeat();
     } catch (error) {
-      setVerificationMessage(formatContractError(error));
+      setCadenceMessage(formatContractError(error));
     } finally {
-      setIsVerifyingAssets(false);
+      setIsSavingCadence(false);
     }
   };
 
@@ -253,6 +413,7 @@ export default function Grantor() {
       if (!publicClient) {
         throw new Error("Wallet client is not ready yet. Please retry.");
       }
+      await ensureTargetChain();
       const hash = await writeContractAsync({
         abi: heirlockAbi,
         address: HEIRLOCK_CONTRACT_ADDRESS,
@@ -279,6 +440,7 @@ export default function Grantor() {
         wallet: "",
         fullName: "",
         birthDate: "",
+        assetId: undefined,
         assetAddress: "",
         shareType: "ABSOLUTE",
         shareAmount: "",
@@ -295,6 +457,24 @@ export default function Grantor() {
       current.map((entry) =>
         entry.id === id ? { ...entry, [field]: value } : entry
       )
+    );
+  };
+
+  const handleBeneficiaryAssetSelection = (id: string, assetId: string) => {
+    setBeneficiaries((current) =>
+      current.map((entry) => {
+        if (entry.id !== id) return entry;
+        if (!assetId) {
+          const { assetId: _, ...rest } = entry;
+          return { ...rest, assetId: undefined };
+        }
+        const selectedAsset = assetMap[assetId];
+        return {
+          ...entry,
+          assetId,
+          assetAddress: selectedAsset?.address ?? entry.assetAddress,
+        };
+      })
     );
   };
 
@@ -319,7 +499,8 @@ export default function Grantor() {
           ? Boolean(entry.wallet)
           : Boolean(entry.fullName && entry.birthDate);
 
-      return hasIdentity && entry.assetAddress && entry.shareAmount;
+      const resolvedAsset = resolveAssetAddress(entry, assetMap);
+      return hasIdentity && resolvedAsset && entry.shareAmount;
     });
 
     if (!sanitizedEntries.length) {
@@ -331,9 +512,13 @@ export default function Grantor() {
     let preparedEntries: PreparedInstruction[] = [];
     try {
       preparedEntries = sanitizedEntries.map((entry) => {
-        const asset = entry.assetAddress.trim() as `0x${string}`;
+        const asset = resolveAssetAddress(entry, assetMap) as `0x${string}`;
         if (!isAddress(asset)) {
           throw new Error(`Asset address for ${entry.label || entry.id} is invalid.`);
+        }
+        if (entry.assetId && assetVerification[entry.assetId]?.status !== "verified") {
+          const assetLabel = assetMap[entry.assetId]?.symbol || "this asset";
+          throw new Error(`Verify ${assetLabel} before assigning it to a beneficiary.`);
         }
         const shareValue = parseShareValue(entry.shareAmount);
         const shareTuple = {
@@ -397,6 +582,7 @@ export default function Grantor() {
     }
 
     try {
+      await ensureTargetChain();
       const hashes: `0x${string}`[] = [];
       for (const entry of preparedEntries) {
         if (entry.mode === "wallet" && entry.wallet) {
@@ -423,10 +609,14 @@ export default function Grantor() {
       if (!hashes.length) {
         setWillStatusMessage("Nothing to submit. Double-check your entries.");
       } else {
+        const reminder = `Thanks for locking in your heirs — review or update these instructions before your ${Math.max(
+          1,
+          Number(timePeriodDays) || 1
+        )}-day check-in window closes.`;
         setWillStatusMessage(
           `Heirlock stored ${hashes.length} allocation${
             hashes.length > 1 ? "s" : ""
-          }. Latest tx hash: ${hashes[hashes.length - 1]}`
+          }. Latest tx hash: ${hashes[hashes.length - 1]}. ${reminder}`
         );
       }
     } catch (error) {
@@ -454,72 +644,200 @@ export default function Grantor() {
   return (
     <main className="flex-1 bg-background text-foreground">
       <div className="mx-auto max-w-5xl space-y-10 px-4 py-10">
-        <HeartbeatLiveness ownerAddress={walletAddress} refreshKey={heartbeatRefreshKey} />
-
-        <section className="grid gap-6 md:grid-cols-2">
-          <div className="rounded-2xl border border-border bg-card/70 p-6">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xl font-semibold text-foreground">Cross-chain assets</h3>
-              <span
-                className={`text-xs ${
-                  isConnected ? "text-accent" : "text-muted-foreground"
-                } flex items-center gap-2`}
-              >
-                <span className="h-2 w-2 rounded-full bg-current" />
-                {isConnected ? "Connected" : "Connect wallet"}
-              </span>
+        <section className="space-y-6 rounded-3xl border border-border bg-card/80 p-8">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Step 1 · Inventory</p>
+              <h3 className="text-2xl font-semibold text-foreground">Verify cross-chain holdings</h3>
+              <p className="text-sm text-muted-foreground">
+                Similar to Zerion, we surface the assets living across your wallets so you can decide what the Heirlock
+                contract should inherit.
+              </p>
             </div>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Heirlock indexes balances from every supported EVM chain to build a unified inventory
-              of your estate. Choose which assets go into each beneficiary&apos;s allocation.
-            </p>
-            <div className="mt-6 space-y-3">
-              {assets.map((asset) => (
+            <div className="flex flex-col items-end gap-2 text-right text-xs text-muted-foreground">
+              <span
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold ${
+                  isConnected ? "border-emerald-400/40 text-emerald-200" : "border-border text-muted-foreground"
+                }`}
+              >
+                <span className={`h-2 w-2 rounded-full ${isConnected ? "bg-emerald-400" : "bg-muted-foreground"}`} />
+                {isConnected ? `Wallet · ${formatAddress(walletAddress)}` : "Wallet disconnected"}
+              </span>
+              <span className={needsNetworkSwitch ? "text-destructive" : "text-accent"}>
+                {needsNetworkSwitch ? "Switch to Celo Sepolia" : "Celo Sepolia network ready"}
+              </span>
+              {needsNetworkSwitch && (
+                <button
+                  type="button"
+                  onClick={handleEnsureNetwork}
+                  disabled={isSwitchingChain}
+                  className="rounded-full border border-destructive/50 px-4 py-1 text-[11px] font-semibold text-destructive transition hover:border-destructive disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {isSwitchingChain ? "Switching..." : "Switch network"}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {!isConnected && (
+            <div className="rounded-2xl border border-dashed border-border/60 bg-background/40 p-4 text-sm text-muted-foreground">
+              <p className="font-semibold text-foreground">Connect a wallet to pull balances.</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Choose the wallet that controls the estate on Celo Sepolia.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {availableConnectors.length ? (
+                  availableConnectors.map((connector) => (
+                    <button
+                      key={connector.id}
+                      type="button"
+                      onClick={() => handleConnectWallet(connector.id)}
+                      disabled={connectingConnectorId === connector.id || isConnecting}
+                      className="rounded-xl border border-border bg-card/70 px-4 py-2 text-xs font-semibold text-foreground transition hover:border-primary disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {connectingConnectorId === connector.id ? "Connecting..." : connector.name}
+                    </button>
+                  ))
+                ) : (
+                  <span>No wallet connectors available in this context.</span>
+                )}
+              </div>
+              {connectError && (
+                <p className="mt-2 text-xs text-destructive">{connectError}</p>
+              )}
+            </div>
+          )}
+
+          <div className="space-y-3">
+            {assets.map((asset) => {
+              const verification = assetVerification[asset.id];
+              const status = verification?.status || "idle";
+              const isPending = status === "pending";
+              const isVerified = status === "verified";
+              const isError = status === "error";
+              const buttonDisabled = !isConnected || isPending || isVerified || isConnecting;
+              return (
                 <div
                   key={asset.id}
-                  className="flex items-center justify-between rounded-xl border border-border/60 bg-card/80 px-4 py-3"
+                  className="flex flex-col gap-4 rounded-2xl border border-border/60 bg-card/80 p-4 md:flex-row md:items-center md:justify-between"
                 >
                   <div>
                     <p className="text-sm font-semibold text-foreground">
-                      {asset.symbol}{" "}
-                      <span className="text-xs text-muted-foreground">· {asset.chain}</span>
+                      {asset.symbol} <span className="text-xs text-muted-foreground">· {asset.chain}</span>
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {asset.category === "native" ? "Native" : "ERC-20"}{" "}
-                      {asset.address && `• ${asset.address}`}
+                      {asset.category === "native" ? "Native" : "ERC-20"} asset{" "}
+                      {asset.address && `• ${formatAddress(asset.address)}`}
                     </p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold text-foreground">
-                      {asset.balance.toFixed(2)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {currencyFormatter.format(asset.fiatValue)}
-                    </p>
+                  <div className="flex flex-col gap-2 text-sm text-muted-foreground md:items-end">
+                    <div className="text-right">
+                      <p className="font-semibold text-foreground">{asset.balance.toFixed(2)}</p>
+                      <p className="text-xs">{currencyFormatter.format(asset.fiatValue)}</p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleVerifyAsset(asset)}
+                        disabled={buttonDisabled}
+                        className={`rounded-full px-4 py-1 text-xs font-semibold transition ${
+                          isVerified
+                            ? "bg-emerald-500/20 text-emerald-200"
+                            : "bg-primary/10 text-primary hover:bg-primary/20"
+                        } disabled:cursor-not-allowed disabled:opacity-50`}
+                      >
+                        {isVerified ? "Chain verified" : isPending ? "Verifying..." : `Verify ${asset.chain}`}
+                      </button>
+                      <span
+                        className={`rounded-full border px-3 py-1 text-[11px] ${
+                          isVerified
+                            ? "border-emerald-500/40 text-emerald-200"
+                            : isError
+                            ? "border-destructive/40 text-destructive"
+                            : "border-border text-muted-foreground"
+                        }`}
+                      >
+                        {isVerified ? "Ready for will" : isError ? "Needs attention" : "Not added"}
+                      </span>
+                    </div>
+                    {verification?.note && (
+                      <p
+                        className={`text-xs ${
+                          isVerified
+                            ? "text-emerald-200"
+                            : isError
+                            ? "text-destructive"
+                            : "text-muted-foreground"
+                        }`}
+                      >
+                        {verification.note}
+                      </p>
+                    )}
                   </div>
                 </div>
-              ))}
+              );
+            })}
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-2xl border border-border/70 bg-background/40 p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Holdings verified</p>
+              <p className="text-xl font-semibold text-foreground">
+                {verifiedAssetCount}/{Math.max(assets.length, 1)}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-border/70 bg-background/40 p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Chains covered</p>
+              <p className="text-xl font-semibold text-foreground">
+                {verifiedChainCount}/{Math.max(totalChainCount, 1)}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-border/70 bg-background/40 p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Fiat ready</p>
+              <p className="text-xl font-semibold text-foreground">
+                {currencyFormatter.format(verifiedFiatValue)}{" "}
+                <span className="text-xs text-muted-foreground">({holdingsCoverage}% of holdings)</span>
+              </p>
             </div>
           </div>
+        </section>
+
+        <section className="grid gap-6 md:grid-cols-2">
+          <HeartbeatLiveness ownerAddress={walletAddress} refreshKey={heartbeatRefreshKey} />
           <div className="rounded-2xl border border-border bg-card/70 p-6">
-            <h3 className="text-xl font-semibold text-foreground">Verification</h3>
+            <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Step 2 · Cadence</p>
+            <h3 className="text-xl font-semibold text-foreground">Choose your check-in cadence</h3>
             <p className="mt-2 text-sm text-muted-foreground">
-              Configure your liveness cadence directly on the Heirlock contract before drafting a
-              will. This calls
-              <code className="mx-1 rounded bg-muted px-1 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-                configureLiveness
-              </code>
-              under the hood so heirs can only claim after your check-in window lapses.
+              Assign a heartbeat interval that the contract will expect. If you miss it, beneficiaries can eventually
+              claim what you&apos;ve mapped to them.
             </p>
+            <label className="mt-4 flex flex-col gap-2 text-sm font-medium text-foreground">
+              Check-in cadence (days)
+              <input
+                type="number"
+                min={1}
+                inputMode="numeric"
+                value={timePeriodDays}
+                onChange={(event) => setTimePeriodDays(event.target.value)}
+                className="rounded-2xl border border-border bg-card/60 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+                placeholder="30"
+              />
+              <span className="text-xs font-normal text-muted-foreground">
+                This becomes the {Math.max(1, Number(timePeriodDays) || 1)}-day liveness window enforced by{" "}
+                <code className="rounded bg-muted px-1 text-[10px] uppercase tracking-wide">configureLiveness</code>.
+              </span>
+            </label>
             <div className="mt-6 space-y-3">
               <button
-                onClick={handleVerifyHoldings}
-                disabled={isVerifyingAssets}
+                type="button"
+                onClick={handleSaveCadence}
+                disabled={isSavingCadence}
                 className="w-full rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-primary/70"
               >
-                {isVerifyingAssets ? "Saving cadence..." : "Configure liveness"}
+                {isSavingCadence ? "Saving cadence..." : "Save cadence on-chain"}
               </button>
               <button
+                type="button"
                 onClick={handleCheckIn}
                 disabled={isCheckingIn}
                 className="w-full rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-6 py-3 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-70"
@@ -529,26 +847,24 @@ export default function Grantor() {
             </div>
             <div className="mt-4 grid gap-3">
               <div className="rounded-xl border border-border/60 bg-card/80 p-4 text-sm text-muted-foreground">
-                {verificationMessage ? (
+                {cadenceMessage ? (
                   <>
-                    <p>{verificationMessage}</p>
-                    {lastVerification && (
+                    <p>{cadenceMessage}</p>
+                    {lastCadenceUpdate && (
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Last updated · {lastVerification}
+                        Last updated · {lastCadenceUpdate}
                       </p>
                     )}
                   </>
                 ) : (
-                  <p>
-                    Awaiting liveness configuration. Tap the first button to push your cadence on-chain.
-                  </p>
+                  <p>Tap the save button after setting your cadence to lock it into the contract.</p>
                 )}
               </div>
               <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-50">
                 {checkInMessage ? (
                   <p>{checkInMessage}</p>
                 ) : (
-                  <p>Use the check-in button any time you want to refresh the last heartbeat timestamp.</p>
+                  <p>Send a heartbeat whenever you want to refresh the on-chain liveness timestamp.</p>
                 )}
               </div>
             </div>
@@ -590,25 +906,13 @@ export default function Grantor() {
                   placeholder="Tell your beneficiaries what this vault represents and how to treat it."
                 />
               </label>
-              <label className="flex flex-col gap-2 text-sm font-medium text-foreground">
-                Check-in cadence (days)
-                <input
-                  type="number"
-                  min={1}
-                  inputMode="numeric"
-                  value={timePeriodDays}
-                  onChange={(event) => setTimePeriodDays(event.target.value)}
-                  className="rounded-2xl border border-border bg-card/60 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
-                  placeholder="30"
-                />
-                <span className="text-xs font-normal text-muted-foreground">
-                  Heirlock will call{" "}
-                  <code className="rounded bg-muted px-1 text-[10px] uppercase tracking-wide">
-                    checkIn()
-                  </code>{" "}
-                  on your behalf before {Math.max(1, Number(timePeriodDays) || 1)} days lapse.
-                </span>
-              </label>
+              <div className="rounded-2xl border border-border bg-card/60 px-4 py-3">
+                <p className="text-sm font-semibold text-foreground">Cadence summary</p>
+                <p className="text-sm text-muted-foreground">
+                  Heartbeats expected every {Math.max(1, Number(timePeriodDays) || 1)} days. Verified assets ready:{" "}
+                  {verifiedAssetCount}/{assets.length || 1}. Keep this note aligned with what your heirs will receive.
+                </p>
+              </div>
             </div>
 
             <div className="space-y-4">
@@ -699,6 +1003,33 @@ export default function Grantor() {
                           </label>
                         </div>
                       )}
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
+                        Verified holding
+                        <select
+                          value={entry.assetId || ""}
+                          onChange={(event) =>
+                            handleBeneficiaryAssetSelection(entry.id, event.target.value)
+                          }
+                          disabled={!verifiedAssets.length}
+                          className="rounded-xl border border-border bg-card/70 px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <option value="">
+                            {verifiedAssets.length ? "Select a verified asset" : "Verify holdings above first"}
+                          </option>
+                          {verifiedAssets.map((asset) => (
+                            <option key={`${entry.id}-${asset.id}`} value={asset.id}>
+                              {asset.symbol} · {asset.chain}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="text-[11px] text-muted-foreground">
+                          {entry.assetId && assetVerification[entry.assetId]?.note
+                            ? assetVerification[entry.assetId]?.note
+                            : "Link a verified holding or paste an ERC-20 address manually."}
+                        </span>
+                      </label>
                       <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
                         Asset address (ERC-20)
                         <input
