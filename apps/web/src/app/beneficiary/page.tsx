@@ -39,12 +39,12 @@ export default function Beneficiary() {
       {
         title: "2. Quietly verify",
         description:
-          "Self.xyz powers the SAFE logic baked into Heirlock, so only a verified beneficiary can trigger customVerificationHook() on-chain.",
+          "Self.xyz powers the logic baked into Heirlock, so only a verified beneficiary can trigger customVerificationHook() on-chain.",
       },
       {
         title: "3. Release funds with care",
         description:
-          "Once the match is confirmed, the Heirlock SAFE follows the exact instructions set in createIdentityWill() and settles assets to you.",
+          "Once the match is confirmed, the Heirlock follows the exact instructions set in createIdentityWill() and settles assets to you.",
       },
     ],
     []
@@ -164,7 +164,7 @@ export default function Beneficiary() {
                   {address?.slice(0, 6)}...{address?.slice(-4)}
                 </p>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  That&apos;s all you need. When the SAFE confirms a missed check-in, you&apos;ll receive a
+                  That&apos;s all you need. When a missed check-in is confirmed, you&apos;ll receive a
                   gentle prompt to claim.
                 </p>
                 <div className="mt-4 space-y-2">
@@ -308,7 +308,7 @@ export default function Beneficiary() {
             </div>
             <div>
               <p className="text-xs uppercase tracking-wide text-muted-foreground">What happens next</p>
-              <h3 className="text-2xl font-semibold">The SAFE logic stays trusted end-to-end</h3>
+              <h3 className="text-2xl font-semibold">The logic stays trusted end-to-end</h3>
             </div>
           </div>
           <div className="grid gap-5 md:grid-cols-3">
@@ -345,7 +345,7 @@ export default function Beneficiary() {
               </div>
               <p className="text-sm text-muted-foreground">
                 The same privacy-preserving proofs that protected the will author now protect you. We never expose
-                your information—everything is checked through zero-knowledge proofs before the SAFE releases assets.
+                your information—everything is checked through zero-knowledge proofs before the contract releases assets.
               </p>
               <div className="flex flex-wrap gap-2">
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
@@ -409,7 +409,7 @@ export default function Beneficiary() {
                   <code className="rounded bg-muted px-1 text-[10px] uppercase tracking-wide">createIdentityWill()</code>, we hash the
                   beneficiary&apos;s first name, last name, and date of birth. During a claim, Self.xyz proves that the person standing
                   in front of us matches that hash. The contract&apos;s{" "}
-                  <code className="rounded bg-muted px-1 text-[10px] uppercase tracking-wide">customVerificationHook()</code> keeps this SAFE logic intact and only releases
+                  <code className="rounded bg-muted px-1 text-[10px] uppercase tracking-wide">customVerificationHook()</code> keeps this logic intact and only releases
                   the assets when the proof is valid.
                 </p>
               </div>
