@@ -103,12 +103,12 @@ export default function VerifyPage() {
 
   if (!address) {
     return (
-      <main className="flex-1 bg-slate-950 text-slate-100 min-h-screen">
-        <div className="max-w-3xl mx-auto px-4 py-10">
-          <div className="rounded-3xl border border-white/10 bg-slate-900/80 p-8 text-center">
-            <div className="mx-auto mb-6 h-16 w-16 rounded-full bg-amber-500/20 flex items-center justify-center">
+      <main className="flex-1 bg-background text-foreground">
+        <div className="mx-auto flex min-h-screen max-w-3xl items-center px-4 py-10">
+          <div className="w-full rounded-3xl border border-border bg-card/80 p-8 text-center">
+            <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-[#ea5600]/20">
               <svg
-                className="h-8 w-8 text-amber-400"
+                className="h-8 w-8 text-[#ea5600]"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -121,15 +121,15 @@ export default function VerifyPage() {
                 />
               </svg>
             </div>
-            <h1 className="text-2xl font-semibold text-white mb-3">
+            <h1 className="mb-3 text-2xl font-semibold text-foreground">
               Wallet Connection Required
             </h1>
-            <p className="text-slate-400 mb-6">
+            <p className="mb-6 text-muted-foreground">
               Please connect your wallet to proceed with Self identity verification.
             </p>
             <Link
               href="/"
-              className="inline-block rounded-xl bg-indigo-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-indigo-400"
+              className="inline-block rounded-xl bg-[#ea5600] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#ea5600]/90"
             >
               Go back to home
             </Link>
@@ -140,17 +140,16 @@ export default function VerifyPage() {
   }
 
   return (
-    <main className="flex-1 bg-slate-950 text-slate-100 min-h-screen">
-      <div className="max-w-5xl mx-auto px-4 py-10 space-y-8">
-        {/* Header */}
-        <div className="flex items-center justify-between">
+    <main className="flex-1 bg-background text-foreground">
+      <div className="mx-auto max-w-5xl space-y-8 px-4 py-10">
+        <header className="flex flex-col gap-4 rounded-3xl border border-border bg-card/80 p-6 md:flex-row md:items-center md:justify-between">
           <div>
             <Link
               href="/"
-              className="inline-flex items-center text-sm text-indigo-400 hover:text-indigo-300 mb-4"
+              className="inline-flex items-center text-xs font-semibold text-emerald-300 hover:text-emerald-200"
             >
               <svg
-                className="h-4 w-4 mr-2"
+                className="mr-2 h-4 w-4"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -162,304 +161,207 @@ export default function VerifyPage() {
                   d="M10 19l-7-7m0 0l7-7m-7 7h18"
                 />
               </svg>
-              Back to home
+              Back home
             </Link>
-            <h1 className="text-3xl font-semibold text-white">
+            <h1 className="mt-2 text-3xl font-semibold text-foreground">
               Self.xyz Identity Verification
             </h1>
-            <p className="text-slate-400 mt-2">
-              Test the Heirlock contract&apos;s identity verification integration
+            <p className="text-sm text-muted-foreground">
+              Prove a beneficiary identity so the Heirlock relayer can call{" "}
+              <code className="rounded bg-muted px-1 text-[11px] tracking-widest text-emerald-200">
+                claimWithIdentity
+              </code>{" "}
+              on your behalf.
             </p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3">
-            <p className="text-xs text-slate-400">Connected Wallet</p>
-            <p className="font-mono text-sm text-white">
+          <div className="rounded-2xl border border-border/70 bg-background/50 px-4 py-3 text-sm">
+            <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
+              Connected wallet
+            </p>
+            <p className="font-mono text-foreground">
               {address.slice(0, 6)}...{address.slice(-4)}
             </p>
           </div>
-        </div>
+        </header>
 
-        <section className="rounded-3xl border border-indigo-500/20 bg-slate-900/60 p-5 space-y-3">
-          <label className="text-sm font-medium text-white flex flex-col gap-2">
+        <section className="rounded-3xl border border-border bg-card/80 p-6">
+          <label className="flex flex-col gap-2 text-sm font-semibold text-foreground">
             Grantor / owner address
             <input
               type="text"
               value={ownerAddressForProof}
               onChange={(event) => setOwnerAddressForProof(event.target.value.trim())}
               placeholder="0x..."
-              className="rounded-2xl border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-indigo-400 focus:outline-none"
+              className="rounded-2xl border border-border bg-background/60 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-[#ea5600] focus:outline-none"
             />
           </label>
-          <p className="text-xs text-slate-400">
-            We embed this address inside the Self user-defined data so the backend relayer can call
-            <code className="mx-1 rounded bg-slate-800 px-1 py-0.5 text-[10px] uppercase tracking-wide text-indigo-300">
-              claimWithIdentity
-            </code>
-            right after your proof clears.
+          <p className="mt-2 text-xs text-muted-foreground">
+            We embed this address in the Self payload so the backend knows which grantor to unlock right after you pass verification.
           </p>
         </section>
 
-        {/* Main Content */}
         <div className="grid gap-6 lg:grid-cols-2">
-          {/* QR Code Section */}
-          <section className="rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-900 p-8">
-            <h2 className="text-xl font-semibold text-white mb-2">
-              Scan QR Code
-            </h2>
-            <p className="text-sm text-slate-300 mb-6">
-              Use the Self app to scan this QR code and verify your identity
-            </p>
-
-            <div className="flex items-center justify-center p-8 rounded-2xl bg-white/5 border border-white/10">
+          <section className="space-y-4 rounded-3xl border border-border bg-card/90 p-6">
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
+                Step 1
+              </p>
+              <h2 className="text-2xl font-semibold text-foreground">Scan and prove</h2>
+              <p className="text-sm text-muted-foreground">
+                Use the Self app to scan this QR code and complete the verification flow. Keep the app open until you see the success banner.
+              </p>
+            </div>
+            <div className="flex items-center justify-center rounded-2xl border border-border/70 bg-background/40 p-6">
               {selfApp ? (
                 <SelfQRcodeWrapper
                   selfApp={selfApp}
                   onSuccess={handleVerificationSuccess}
                   onError={handleVerificationError}
-                  size={300}
-                  darkMode={true}
+                  size={280}
+                  darkMode
                 />
               ) : (
-                <div className="flex flex-col items-center gap-4">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-400" />
-                  <p className="text-sm text-slate-300">
-                    {qrInitError || "Generating QR Code..."}
-                  </p>
+                <div className="flex flex-col items-center gap-3 text-center text-sm text-muted-foreground">
+                  <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-[#ea5600]" />
+                  <p>{qrInitError || "Preparing QR session..."}</p>
                 </div>
               )}
             </div>
-
             {verificationStatus === "pending" && (
-              <div className="mt-4 rounded-xl bg-blue-500/10 border border-blue-500/30 p-4">
-                <div className="flex items-center gap-3">
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-400" />
-                  <p className="text-sm text-blue-300">
-                    Waiting for verification...
-                  </p>
-                </div>
+              <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-4 text-sm text-emerald-100">
+                Waiting for the Self app to finish...
               </div>
             )}
           </section>
 
-          {/* Information & Status Section */}
           <section className="space-y-6">
-            {/* Status Card */}
-            <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-6">
-              <h3 className="text-lg font-semibold text-white mb-4">
-                Verification Status
-              </h3>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950/60">
-                  <span className="text-sm text-slate-300">Status</span>
-                  <span
-                    className={`text-sm font-semibold ${
-                      verificationStatus === "success"
-                        ? "text-green-400"
-                        : verificationStatus === "error"
-                        ? "text-red-400"
-                        : verificationStatus === "pending"
-                        ? "text-blue-400"
-                        : "text-slate-400"
-                    }`}
-                  >
-                    {verificationStatus === "success"
-                      ? "✓ Verified"
+            <div className="rounded-3xl border border-border bg-card/80 p-6">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-foreground">Verification status</h3>
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                    verificationStatus === "success"
+                      ? "bg-emerald-500/20 text-emerald-200"
                       : verificationStatus === "error"
-                      ? "✗ Failed"
+                      ? "bg-destructive/20 text-destructive"
                       : verificationStatus === "pending"
-                      ? "⋯ Pending"
-                      : "○ Idle"}
-                  </span>
-                </div>
-                {verificationData && (
-                  <>
-                    <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950/60">
-                      <span className="text-sm text-slate-300">
-                        Verified Address
-                      </span>
-                      <span className="text-sm font-mono text-white">
-                        {verificationData.address?.slice(0, 6)}...
-                        {verificationData.address?.slice(-4)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950/60">
-                      <span className="text-sm text-slate-300">Timestamp</span>
-                      <span className="text-xs text-slate-400">
-                        {new Date(verificationData.timestamp).toLocaleString()}
-                      </span>
-                    </div>
-                  </>
-                )}
+                      ? "bg-yellow-500/20 text-yellow-200"
+                      : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {verificationStatus === "success"
+                    ? "Verified"
+                    : verificationStatus === "error"
+                    ? "Failed"
+                    : verificationStatus === "pending"
+                    ? "Pending"
+                    : "Idle"}
+                </span>
               </div>
-
-              {verificationStatus === "success" && (
-                <div className="mt-4 rounded-xl bg-green-500/10 border border-green-500/30 p-4">
-                  <p className="text-sm text-green-300">
-                    ✓ Identity verification successful! You can now use this
-                    verified identity with the Heirlock contract.
+              {verificationData && (
+                <div className="mt-4 space-y-3 text-sm text-muted-foreground">
+                  <p className="flex items-center justify-between rounded-2xl border border-border/60 bg-background/40 px-3 py-2 font-mono text-xs text-foreground">
+                    <span>Address</span>
+                    <span>
+                      {verificationData.address?.slice(0, 6)}...
+                      {verificationData.address?.slice(-4)}
+                    </span>
+                  </p>
+                  <p className="flex items-center justify-between rounded-2xl border border-border/60 bg-background/40 px-3 py-2 text-xs">
+                    <span>Timestamp</span>
+                    <span>{new Date(verificationData.timestamp).toLocaleString()}</span>
                   </p>
                 </div>
               )}
-
+              {verificationStatus === "success" && (
+                <div className="mt-4 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-4 text-sm text-emerald-100">
+                  ✓ Identity proof received. The relayer can now unlock this heir once liveness expires.
+                </div>
+              )}
               {verificationStatus === "error" && errorMessage && (
-                <div className="mt-4 rounded-xl bg-red-500/10 border border-red-500/30 p-4">
-                  <p className="text-sm text-red-300">✗ {errorMessage}</p>
+                <div className="mt-4 rounded-2xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
+                  ✗ {errorMessage}
                 </div>
               )}
             </div>
 
-            {/* Information Card */}
-            <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-6">
-              <h3 className="text-lg font-semibold text-white mb-3">
-                About Self Verification
-              </h3>
-              <div className="space-y-3 text-sm text-slate-300">
-                <p>
-                  Self.xyz provides privacy-preserving identity verification
-                  using zero-knowledge proofs. This integration allows Heirlock
-                  to verify beneficiary identities without storing sensitive
-                  personal information on-chain.
-                </p>
-                <div className="rounded-xl bg-slate-950/60 p-4 space-y-2">
-                  <h4 className="font-semibold text-white text-xs uppercase tracking-wide">
-                    Disclosure Requirements
-                  </h4>
-                  <ul className="space-y-1 text-xs">
-                    <li className="flex items-center gap-2">
-                      <span className="text-green-400">✓</span>
-                      <span>Minimum age: 18 years</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <span className="text-green-400">✓</span>
-                      <span>Full name (first + last)</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <span className="text-green-400">✓</span>
-                      <span>Date of birth</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <span className="text-green-400">✓</span>
-                      <span>Nationality</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <span className="text-red-400">✗</span>
-                      <span>Excluded countries (sanctions compliance)</span>
-                    </li>
-                  </ul>
-                </div>
-              </div>
+            <div className="rounded-3xl border border-border bg-card/80 p-6">
+              <h3 className="text-lg font-semibold text-foreground">What Self shares</h3>
+              <p className="text-sm text-muted-foreground">
+                The Self SDK issues a zero-knowledge proof with the minimum set of disclosures needed for Heirlock:
+              </p>
+              <ul className="mt-4 space-y-2 text-sm text-foreground">
+                <li className="flex items-center gap-2">
+                  <span className="text-emerald-300">✓</span> Full name (first + last)
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-emerald-300">✓</span> Date of birth (for identity hash)
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-emerald-300">✓</span> Nationality + age checks
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-destructive">✗</span> Excluded countries (sanctions)
+                </li>
+              </ul>
             </div>
 
-            {/* Contract Integration Info */}
-            <div className="rounded-2xl border border-indigo-500/30 bg-indigo-500/5 p-6">
-              <h3 className="text-lg font-semibold text-white mb-3">
-                Contract Integration
-              </h3>
-              <div className="space-y-2 text-sm text-slate-300">
-                <p>
-                  The Heirlock contract uses{" "}
-                  <code className="rounded bg-slate-800 px-2 py-0.5 text-xs text-indigo-300">
-                    customVerificationHook
-                  </code>{" "}
-                  to process verified identity data and match it against
-                  beneficiary records.
-                </p>
-                <div className="mt-3 p-3 rounded-xl bg-slate-950/60 font-mono text-xs text-slate-400">
-                  <div>function claimWithIdentity(</div>
-                  <div className="pl-4">address _owner,</div>
-                  <div className="pl-4">bytes32 _identityHash,</div>
-                  <div className="pl-4">bytes calldata _proof</div>
-                  <div>) external</div>
-                </div>
-              </div>
+            <div className="rounded-3xl border border-[#ea5600]/30 bg-[#ea5600]/10 p-6 text-sm text-foreground">
+              <h3 className="text-lg font-semibold text-[#ea5600]">Heirlock contract hook</h3>
+              <p className="mt-2 text-muted-foreground">
+                Once the proof lands, the relayer calls{" "}
+                <code className="rounded bg-muted px-1 text-[11px] uppercase tracking-[0.2em] text-foreground">
+                  claimWithIdentity(owner, hash, proof)
+                </code>{" "}
+                so the heir receives their allocation.
+              </p>
             </div>
           </section>
         </div>
 
-        {/* Documentation Links */}
-        <section className="rounded-2xl border border-white/10 bg-slate-900/60 p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">
-            Documentation & Resources
-          </h3>
-          <div className="grid gap-4 md:grid-cols-3">
+        <section className="rounded-3xl border border-border bg-card/80 p-6">
+          <h3 className="text-lg font-semibold text-foreground">Documentation & Resources</h3>
+          <div className="mt-4 grid gap-4 md:grid-cols-3">
             <a
               href="https://docs.self.xyz"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-3 p-4 rounded-xl border border-white/10 bg-slate-950/60 hover:border-indigo-400/50 transition"
+              className="flex items-center gap-3 rounded-2xl border border-border/70 bg-background/40 p-4 transition hover:border-emerald-300/60"
             >
-              <div className="h-10 w-10 rounded-lg bg-indigo-500/20 flex items-center justify-center">
-                <svg
-                  className="h-5 w-5 text-indigo-400"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                  />
-                </svg>
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-200">
+                📘
               </div>
               <div>
-                <p className="text-sm font-semibold text-white">
-                  Self.xyz Docs
-                </p>
-                <p className="text-xs text-slate-400">Official documentation</p>
+                <p className="text-sm font-semibold text-foreground">Self.xyz docs</p>
+                <p className="text-xs text-muted-foreground">Verification specs</p>
               </div>
             </a>
             <a
               href="https://github.com/selfxyz/workshop"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-3 p-4 rounded-xl border border-white/10 bg-slate-950/60 hover:border-indigo-400/50 transition"
+              className="flex items-center gap-3 rounded-2xl border border-border/70 bg-background/40 p-4 transition hover:border-emerald-300/60"
             >
-              <div className="h-10 w-10 rounded-lg bg-indigo-500/20 flex items-center justify-center">
-                <svg
-                  className="h-5 w-5 text-indigo-400"
-                  fill="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
-                    clipRule="evenodd"
-                  />
-                </svg>
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-200">
+                🛠️
               </div>
               <div>
-                <p className="text-sm font-semibold text-white">
-                  Workshop Repo
-                </p>
-                <p className="text-xs text-slate-400">Example implementations</p>
+                <p className="text-sm font-semibold text-foreground">Workshop repo</p>
+                <p className="text-xs text-muted-foreground">Example integrations</p>
               </div>
             </a>
             <a
-              href={`/api/auth/self/verify`}
+              href="/api/auth/self/verify"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-3 p-4 rounded-xl border border-white/10 bg-slate-950/60 hover:border-indigo-400/50 transition"
+              className="flex items-center gap-3 rounded-2xl border border-border/70 bg-background/40 p-4 transition hover:border-emerald-300/60"
             >
-              <div className="h-10 w-10 rounded-lg bg-indigo-500/20 flex items-center justify-center">
-                <svg
-                  className="h-5 w-5 text-indigo-400"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
-                  />
-                </svg>
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-200">
+                🔗
               </div>
               <div>
-                <p className="text-sm font-semibold text-white">API Endpoint</p>
-                <p className="text-xs text-slate-400">Verification callback</p>
+                <p className="text-sm font-semibold text-foreground">Heirlock endpoint</p>
+                <p className="text-xs text-muted-foreground">POST /api/auth/self/verify</p>
               </div>
             </a>
           </div>
