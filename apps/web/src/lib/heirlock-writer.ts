@@ -46,6 +46,7 @@ export async function writeWithRelayer({ functionName, args }: WriteConfig) {
   const client = getRelayerWalletClient();
   const hash = await client.writeContract({
     account,
+    chain: client.chain ?? celoSepolia,
     address: HEIRLOCK_CONTRACT_ADDRESS,
     abi: heirlockAbi,
     functionName,

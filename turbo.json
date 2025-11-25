@@ -3,6 +3,11 @@
   "globalDependencies": [
     "**/.env.*local"
   ],
+  "globalEnv": [
+    "CELO_RPC_URL",
+    "HEIRLOCK_RELAYER_PRIVATE_KEY",
+    "HEIRLOCK_CRON_SECRET"
+  ],
   "tasks": {
     "build": {
       "dependsOn": [
