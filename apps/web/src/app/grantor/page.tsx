@@ -130,6 +130,9 @@ export default function Grantor() {
   const [isSubmittingWill, setIsSubmittingWill] = useState(false);
   const [willStatusMessage, setWillStatusMessage] = useState<string | null>(null);
   const [payloadPreview, setPayloadPreview] = useState<any | null>(null);
+  const [heartbeatRefreshKey, setHeartbeatRefreshKey] = useState(0);
+  const [isCheckingIn, setIsCheckingIn] = useState(false);
+  const [checkInMessage, setCheckInMessage] = useState<string | null>(null);
 
   // Wallet connection hooks
   const { address, isConnected, isConnecting } = useAccount();
@@ -157,6 +160,8 @@ export default function Grantor() {
     if (!addr || addr.length < 10) return addr;
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
+
+  const refreshHeartbeat = () => setHeartbeatRefreshKey((current) => current + 1);
 
   // mock holdings anchored by connected wallet
   useEffect(() => {
@@ -230,10 +235,37 @@ export default function Grantor() {
       const timestamp = new Date().toLocaleTimeString();
       setLastVerification(timestamp);
       setVerificationMessage("Liveness cadence saved on Heirlock.");
+      refreshHeartbeat();
     } catch (error) {
       setVerificationMessage(formatContractError(error));
     } finally {
       setIsVerifyingAssets(false);
+    }
+  };
+
+  const handleCheckIn = async () => {
+    setIsCheckingIn(true);
+    setCheckInMessage(null);
+    try {
+      if (!isConnected || !address) {
+        throw new Error("Connect your wallet before sending a check-in.");
+      }
+      if (!publicClient) {
+        throw new Error("Wallet client is not ready yet. Please retry.");
+      }
+      const hash = await writeContractAsync({
+        abi: heirlockAbi,
+        address: HEIRLOCK_CONTRACT_ADDRESS,
+        functionName: "checkIn",
+        args: [],
+      });
+      await publicClient.waitForTransactionReceipt({ hash });
+      setCheckInMessage(`Check-in saved on Heirlock at ${new Date().toLocaleTimeString()}.`);
+      refreshHeartbeat();
+    } catch (error) {
+      setCheckInMessage(formatContractError(error));
+    } finally {
+      setIsCheckingIn(false);
     }
   };
 
@@ -422,7 +454,7 @@ export default function Grantor() {
   return (
     <main className="flex-1 bg-background text-foreground">
       <div className="mx-auto max-w-5xl space-y-10 px-4 py-10">
-        <HeartbeatLiveness ownerAddress={walletAddress} />
+        <HeartbeatLiveness ownerAddress={walletAddress} refreshKey={heartbeatRefreshKey} />
 
         <section className="grid gap-6 md:grid-cols-2">
           <div className="rounded-2xl border border-border bg-card/70 p-6">
@@ -479,26 +511,46 @@ export default function Grantor() {
               </code>
               under the hood so heirs can only claim after your check-in window lapses.
             </p>
-            <button
-              onClick={handleVerifyHoldings}
-              disabled={isVerifyingAssets}
-              className="mt-6 w-full rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-primary/70"
-            >
-              {isVerifyingAssets ? "Saving cadence..." : "Configure liveness"}
-            </button>
-            <div className="mt-4 rounded-xl border border-border/60 bg-card/80 p-4 text-sm text-muted-foreground">
-              {verificationMessage ? (
-                <>
-                  <p>{verificationMessage}</p>
-                  {lastVerification && (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Last updated · {lastVerification}
-                    </p>
-                  )}
-                </>
-              ) : (
-                <p>Awaiting liveness configuration. Tap the button to push your cadence on-chain.</p>
-              )}
+            <div className="mt-6 space-y-3">
+              <button
+                onClick={handleVerifyHoldings}
+                disabled={isVerifyingAssets}
+                className="w-full rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-primary/70"
+              >
+                {isVerifyingAssets ? "Saving cadence..." : "Configure liveness"}
+              </button>
+              <button
+                onClick={handleCheckIn}
+                disabled={isCheckingIn}
+                className="w-full rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-6 py-3 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {isCheckingIn ? "Pinging contract..." : "Send check-in to Heirlock"}
+              </button>
+            </div>
+            <div className="mt-4 grid gap-3">
+              <div className="rounded-xl border border-border/60 bg-card/80 p-4 text-sm text-muted-foreground">
+                {verificationMessage ? (
+                  <>
+                    <p>{verificationMessage}</p>
+                    {lastVerification && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Last updated · {lastVerification}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p>
+                    Awaiting liveness configuration. Tap the first button to push your cadence on-chain.
+                  </p>
+                )}
+              </div>
+              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-50">
+                {checkInMessage ? (
+                  <p>{checkInMessage}</p>
+                ) : (
+                  <p>Use the check-in button any time you want to refresh the last heartbeat timestamp.</p>
+                )}
+              </div>
             </div>
           </div>
         </section>

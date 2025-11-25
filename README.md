@@ -91,6 +91,8 @@ Add a `.env.local` (web) and/or `.env` (contracts) file with the variables below
 | `NEXT_PUBLIC_FARCASTER_SIGNATURE`       | Matching signature for the account association.                                                |
 | `NEXT_PUBLIC_HEIRLOCK_CONTRACT_ADDRESS` | Deployed Heirlock contract address (defaults to a placeholder).                                |
 | `CELO_RPC_URL`                          | Optional custom RPC endpoint for the viem public client (defaults to Alfajores Forno).         |
+| `HEIRLOCK_RELAYER_PRIVATE_KEY`          | Private key used by the backend relayer to call `checkIn` and `claimWithIdentity` on your behalf. |
+| `HEIRLOCK_CRON_SECRET`                  | Shared secret required by `/api/cron/check-in` to prevent unauthorized schedule triggers.      |
 | `SELF_SCOPE_SEED` / `SCOPE_SEED`        | Scope seed shared between Self QR builder (frontend) and verifier (backend + Foundry scripts). |
 | `IDENTITY_VERIFICATION_HUB`             | Self.xyz hub contract address referenced by Foundry deploy/test scripts.                       |
 | `JWT_SECRET`                            | Secret for Farcaster quick-auth endpoints if you enable authenticated API routes.              |
@@ -114,10 +116,24 @@ Add a `.env.local` (web) and/or `.env` (contracts) file with the variables below
   - `/api/notify` exposes a programmatic notification endpoint so you can schedule liveness reminders or "check-in missed" alerts.
 - **Self.xyz identity**
   - `/verify` page builds QR codes with `SelfAppBuilder` so heirs can scan, sign, and send verifiable credentials.
-  - `/api/auth/self/verify` consumes the callback, validates ZK proofs, enforces sanction rules, hashes the identity, and cross-references Heirlock via viem (`generateIdentityHash`, `hasIdentityClaimed`, `getIdentityBeneficiaries`).
+  - `/api/auth/self/verify` consumes the callback, validates ZK proofs, enforces sanction rules, hashes the identity, cross-references Heirlock via viem (`generateIdentityHash`, `hasIdentityClaimed`, `getIdentityBeneficiaries`), and, when `HEIRLOCK_RELAYER_PRIVATE_KEY` is configured, automatically relays `claimWithIdentity` so verified heirs receive funds.
 - **Heirlock contract**
   - Allocations are stored per asset with BPS tracking to prevent over-commitment, snapshots lock balances at first claim, and `_safeTransferFrom` handles ERC-20s with or without return values.
   - Identity claims call `customVerificationHook` to match Self disclosed data to on-chain identity hashes before transferring.
+- **Heartbeat automation**
+  - `/api/cron/check-in` lets you plug a Vercel cron job or any scheduler into the new “send check-in” relayer. Gate it with `HEIRLOCK_CRON_SECRET` and the same private key used for liveness pings.
+
+## LayerZero cross-chain integration
+
+To keep the UI + contract stack portable across chains, plug Heirlock into LayerZero&apos;s OApp V2 kit. The pattern below preserves the current Heirlock contract as the _root_ liveness source while letting satellite executors on other chains honor the same will instructions:
+
+1. **Deploy LayerZero endpoints** – Install `@layerzerolabs/lz-evm-oapp-v2` in `apps/contracts`, import `ILayerZeroEndpointV2` in `Heirlock.sol`, and store the endpoint that lives on your home chain (Celo/Alfajores today). A simple adapter contract extends `OApp` and exposes `sendCrossChainHeartbeat(bytes payload, uint32 dstEid)`.
+2. **Spin up satellite executors** – On every destination chain that should settle funds, deploy a minimal `HeirlockSatellite` that inherits `OAppReceiver`. It validates payloads (owner, asset, share tuple) and calls the destination token vault / treasury. Authorized senders are enforced via LayerZero trustless DVN + executor configuration.
+3. **Bridge instructions at creation time** – When a grantor adds an asset that lives on chain _N_, the UI tags the asset with its LayerZero endpoint ID. After `createWill` succeeds on the root contract, call the adapter&apos;s `sendCrossChainHeartbeat` with the serialized instructions so the satellite mirrors the allocation.
+4. **Synchronize liveness** – When `configureLiveness` or `checkIn` runs, submit a LayerZero message to every satellite. Each receiver updates its cached `lastCheckIn` so a remote `claim` only executes after the same heartbeat window expires.
+5. **Remote claims** – Beneficiaries on chain _N_ trigger the satellite contract. If the owner is marked “not alive” locally, the satellite either transfers funds held there or uses LayerZero&apos;s OFT / Magpie adapters to bridge ERC-20 balances back to the main settlement chain before sending them to the claimer.
+
+Because the adapters ride on LayerZero&apos;s relayer + DVN stack, you inherit retries, ordered delivery, and gas abstraction. The UI only needs to surface the `endpointId` for each asset and let grantors pick which chains to sync; everything else is just a viem contract call to the LayerZero-aware adapters.
 
 ## Next Steps
 

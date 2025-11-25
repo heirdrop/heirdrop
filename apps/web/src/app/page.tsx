@@ -64,7 +64,8 @@ export default function Home() {
               <p className="text-base text-muted-foreground">
                 HeirDrop is an onchain succession protocol that lets you create a digital will for your crypto legacy.
                 Designate an heir (a wallet or a person) to claim your assets across multiple EVM chains.
-                Set it and forget it—Heirdrop ensures your digital wealth transfers seamlessly when it matters most,
+                Set it and forget it.
+                Heirdrop ensures your digital wealth transfers seamlessly when it matters most,
                 whether it&apos;s for inheritance, private key recovery,or peace of mind.
               </p>
             </div>
@@ -86,10 +87,10 @@ export default function Home() {
                 <p className="font-mono text-sm text-foreground">{formatAddress(walletAddress)}</p>
                 <p className="mt-1">
                   {isConnected
-                    ? "Wallet connected via Farcaster"
+                    ? "Wallet connected"
                     : isConnecting
                     ? "Connecting wallet..."
-                    : "Tap to connect wallet inside Warpcast"}
+                    : "Tap to connect wallet"}
                 </p>
               </div>
             </div>
