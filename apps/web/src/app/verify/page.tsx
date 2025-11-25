@@ -5,6 +5,7 @@ import { SelfQRcodeWrapper, SelfAppBuilder, countries } from "@selfxyz/qrcode";
 import type { SelfApp } from "@selfxyz/qrcode";
 import { useAccount } from "wagmi";
 import Link from "next/link";
+import { isAddress } from "viem";
 
 export default function VerifyPage() {
   const { address } = useAccount();
@@ -14,9 +15,21 @@ export default function VerifyPage() {
   >("idle");
   const [verificationData, setVerificationData] = useState<any>(null);
   const [errorMessage, setErrorMessage] = useState<string>("");
+  const [ownerAddressForProof, setOwnerAddressForProof] = useState("");
+  const [qrInitError, setQrInitError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!address) return;
+    if (!ownerAddressForProof) {
+      setSelfApp(null);
+      setQrInitError("Enter the grantor's wallet so we can request the right claim.");
+      return;
+    }
+    if (!isAddress(ownerAddressForProof as `0x${string}`)) {
+      setSelfApp(null);
+      setQrInitError("Owner address must be a valid checksum address.");
+      return;
+    }
 
     try {
       // Use ngrok URL if available (for development), otherwise use the origin
@@ -35,6 +48,7 @@ export default function VerifyPage() {
         userDefinedData: JSON.stringify({
           purpose: "beneficiary_verification",
           timestamp: Date.now(),
+          ownerAddress: ownerAddressForProof,
         }),
         disclosures: {
           minimumAge: 18,
@@ -52,11 +66,12 @@ export default function VerifyPage() {
       }).build();
 
       setSelfApp(app);
+      setQrInitError(null);
     } catch (error) {
       console.error("Error building Self app:", error);
       setErrorMessage("Failed to initialize Self verification");
     }
-  }, [address]);
+  }, [address, ownerAddressForProof]);
 
   const handleVerificationSuccess = async () => {
     console.log("✅ Verification successful!");
@@ -164,6 +179,26 @@ export default function VerifyPage() {
           </div>
         </div>
 
+        <section className="rounded-3xl border border-indigo-500/20 bg-slate-900/60 p-5 space-y-3">
+          <label className="text-sm font-medium text-white flex flex-col gap-2">
+            Grantor / owner address
+            <input
+              type="text"
+              value={ownerAddressForProof}
+              onChange={(event) => setOwnerAddressForProof(event.target.value.trim())}
+              placeholder="0x..."
+              className="rounded-2xl border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-indigo-400 focus:outline-none"
+            />
+          </label>
+          <p className="text-xs text-slate-400">
+            We embed this address inside the Self user-defined data so the backend relayer can call
+            <code className="mx-1 rounded bg-slate-800 px-1 py-0.5 text-[10px] uppercase tracking-wide text-indigo-300">
+              claimWithIdentity
+            </code>
+            right after your proof clears.
+          </p>
+        </section>
+
         {/* Main Content */}
         <div className="grid gap-6 lg:grid-cols-2">
           {/* QR Code Section */}
@@ -188,7 +223,7 @@ export default function VerifyPage() {
                 <div className="flex flex-col items-center gap-4">
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-400" />
                   <p className="text-sm text-slate-300">
-                    Generating QR Code...
+                    {qrInitError || "Generating QR Code..."}
                   </p>
                 </div>
               )}
@@ -433,4 +468,3 @@ export default function VerifyPage() {
     </main>
   );
 }
-

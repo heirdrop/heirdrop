@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 type HeartbeatProps = {
   ownerAddress?: string | null;
+  refreshKey?: number;
 };
 
 type LivenessPayload = {
@@ -51,7 +52,7 @@ function formatAddress(address?: string | null) {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
-export function HeartbeatLiveness({ ownerAddress }: HeartbeatProps) {
+export function HeartbeatLiveness({ ownerAddress, refreshKey = 0 }: HeartbeatProps) {
   const [payload, setPayload] = useState<LivenessPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -86,7 +87,7 @@ export function HeartbeatLiveness({ ownerAddress }: HeartbeatProps) {
     return () => {
       cancelled = true;
     };
-  }, [ownerAddress]);
+  }, [ownerAddress, refreshKey]);
 
   const nowSeconds = Date.now() / 1000;
   const progress = useMemo(() => {

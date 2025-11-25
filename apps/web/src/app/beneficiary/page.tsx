@@ -1,7 +1,20 @@
 "use client";
 
+import heirlockAbi from "@/lib/heirlock-abi.json";
+import { HEIRLOCK_CONTRACT_ADDRESS } from "@/lib/heirlock-contract";
 import { FormEvent, useMemo, useState } from "react";
-import { useAccount, useConnect } from "wagmi";
+import { BaseError, isAddress } from "viem";
+import { useAccount, useConnect, usePublicClient, useWriteContract } from "wagmi";
+
+const formatContractError = (error: unknown) => {
+  if (error instanceof BaseError && error.shortMessage) {
+    return error.shortMessage;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return "Unable to execute the contract call.";
+};
 
 export default function Beneficiary() {
   const { address, isConnected, isConnecting } = useAccount();
@@ -10,11 +23,16 @@ export default function Beneficiary() {
   const [birthDate, setBirthDate] = useState("");
   const [formMessage, setFormMessage] = useState<string | null>(null);
   const [formState, setFormState] = useState<"idle" | "submitting" | "success">("idle");
+  const [ownerToClaim, setOwnerToClaim] = useState("");
+  const [claimStatus, setClaimStatus] = useState<"idle" | "pending" | "success" | "error">("idle");
+  const [claimMessage, setClaimMessage] = useState<string | null>(null);
+  const publicClient = usePublicClient();
+  const { writeContractAsync } = useWriteContract();
 
   const instructionSteps = useMemo(
     () => [
       {
-        title: "1. Let us know you're here",
+        title: "1. Let us know you&apos;re here",
         description:
           "Connect a wallet or share your name and birth date. We match that information to the secure hash your loved one stored when they created the will.",
       },
@@ -45,9 +63,51 @@ export default function Beneficiary() {
     setTimeout(() => {
       setFormState("success");
       setFormMessage(
-        "Thank you. We'll compare this information with the encrypted record your loved one left us and follow up with verification steps."
+        "Thank you. We&apos;ll compare this information with the encrypted record your loved one left us and follow up with verification steps."
       );
     }, 800);
+  };
+
+  const handleWalletClaim = async () => {
+    if (!isConnected || !address) {
+      setClaimStatus("error");
+      setClaimMessage("Connect your wallet to initiate a claim.");
+      return;
+    }
+    const trimmedOwner = ownerToClaim.trim() as `0x${string}`;
+    if (!trimmedOwner) {
+      setClaimStatus("error");
+      setClaimMessage("Enter the grantor's address you're claiming from.");
+      return;
+    }
+    if (!isAddress(trimmedOwner)) {
+      setClaimStatus("error");
+      setClaimMessage("Owner address must be a valid checksum address.");
+      return;
+    }
+    if (!publicClient) {
+      setClaimStatus("error");
+      setClaimMessage("Wallet client is not ready yet. Please retry.");
+      return;
+    }
+
+    setClaimStatus("pending");
+    setClaimMessage(null);
+
+    try {
+      const hash = (await writeContractAsync({
+        abi: heirlockAbi,
+        address: HEIRLOCK_CONTRACT_ADDRESS,
+        functionName: "claim",
+        args: [trimmedOwner],
+      })) as `0x${string}`;
+      await publicClient.waitForTransactionReceipt({ hash });
+      setClaimStatus("success");
+      setClaimMessage(`Claim executed. Tx hash: ${hash}`);
+    } catch (error) {
+      setClaimStatus("error");
+      setClaimMessage(formatContractError(error));
+    }
   };
 
   return (
@@ -58,11 +118,11 @@ export default function Beneficiary() {
             Beneficiary Guidance
           </p>
           <h1 className="text-3xl font-semibold text-foreground">
-            We're sorry for your loss. Let's make this part gentle.
+            We&apos;re sorry for your loss. Let&apos;s make this part gentle.
           </h1>
           <p className="text-base text-muted-foreground">
             Heirlock follows the wishes that were carefully written for you. Whether you already use a
-            wallet or you just need to share who you are, the SAFE logic stays intact so assets only
+            wallet or you just need to share who you are, the logic stays intact so assets only
             move when they truly should.
           </p>
         </header>
@@ -88,7 +148,7 @@ export default function Beneficiary() {
               </div>
               <div>
                 <p className="text-xs uppercase tracking-wide text-primary/80">I already have a wallet</p>
-                <h2 className="text-xl font-semibold">Connect and you're set</h2>
+                <h2 className="text-xl font-semibold">Connect and you&apos;re set</h2>
               </div>
             </div>
 
@@ -104,9 +164,42 @@ export default function Beneficiary() {
                   {address?.slice(0, 6)}...{address?.slice(-4)}
                 </p>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  That's all you need. When the SAFE confirms a missed check-in, you'll receive a
+                  That&apos;s all you need. When the SAFE confirms a missed check-in, you&apos;ll receive a
                   gentle prompt to claim.
                 </p>
+                <div className="mt-4 space-y-2">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-green-200/70">
+                    Owner address to claim from
+                    <input
+                      value={ownerToClaim}
+                      onChange={(event) => {
+                        setOwnerToClaim(event.target.value);
+                        if (claimStatus !== "pending") {
+                          setClaimStatus("idle");
+                        }
+                      }}
+                      placeholder="0x..."
+                      className="mt-1 w-full rounded-xl border border-green-500/30 bg-green-900/40 px-3 py-2 text-sm text-green-100 placeholder:text-green-200/50 focus:border-green-400 focus:outline-none"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleWalletClaim}
+                    disabled={claimStatus === "pending"}
+                    className="w-full rounded-xl bg-green-500/90 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {claimStatus === "pending" ? "Claiming..." : "Claim your allocation"}
+                  </button>
+                  {claimMessage && (
+                    <p
+                      className={`text-xs ${
+                        claimStatus === "success" ? "text-green-200" : "text-red-200"
+                      }`}
+                    >
+                      {claimMessage}
+                    </p>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="space-y-4">
@@ -154,7 +247,7 @@ export default function Beneficiary() {
                 </svg>
               </div>
               <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">No wallet? That's okay.</p>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">No wallet? That&apos;s okay.</p>
                 <h2 className="text-xl font-semibold">Tell us who you are</h2>
               </div>
             </div>
@@ -312,10 +405,10 @@ export default function Beneficiary() {
               <div className="flex-1">
                 <p className="mb-1 text-xs font-semibold text-foreground">How it works with Heirlock</p>
                 <p className="text-xs text-muted-foreground">
-                  When wills are created using {" "}
+                  When wills are created using{" "}
                   <code className="rounded bg-muted px-1 text-[10px] uppercase tracking-wide">createIdentityWill()</code>, we hash the
-                  beneficiary's first name, last name, and date of birth. During a claim, Self.xyz proves that the person standing
-                  in front of us matches that hash. The contract's {" "}
+                  beneficiary&apos;s first name, last name, and date of birth. During a claim, Self.xyz proves that the person standing
+                  in front of us matches that hash. The contract&apos;s{" "}
                   <code className="rounded bg-muted px-1 text-[10px] uppercase tracking-wide">customVerificationHook()</code> keeps this SAFE logic intact and only releases
                   the assets when the proof is valid.
                 </p>
