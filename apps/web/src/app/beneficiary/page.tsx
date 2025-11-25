@@ -122,7 +122,7 @@ export default function Beneficiary() {
           </h1>
           <p className="text-base text-muted-foreground">
             Heirlock follows the wishes that were carefully written for you. Whether you already use a
-            wallet or you just need to share who you are, the SAFE logic stays intact so assets only
+            wallet or you just need to share who you are, the logic stays intact so assets only
             move when they truly should.
           </p>
         </header>

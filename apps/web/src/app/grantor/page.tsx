@@ -650,7 +650,7 @@ export default function Grantor() {
               <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Step 1 · Inventory</p>
               <h3 className="text-2xl font-semibold text-foreground">Verify cross-chain holdings</h3>
               <p className="text-sm text-muted-foreground">
-                Similar to Zerion, we surface the assets living across your wallets so you can decide what the Heirlock
+                Surface the assets living across your wallets so you can decide what the Heirlock
                 contract should inherit.
               </p>
             </div>
@@ -683,7 +683,7 @@ export default function Grantor() {
             <div className="rounded-2xl border border-dashed border-border/60 bg-background/40 p-4 text-sm text-muted-foreground">
               <p className="font-semibold text-foreground">Connect a wallet to pull balances.</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Choose the wallet that controls the estate on Celo Sepolia.
+                Choose the wallet that controls the estate on Celo.
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {availableConnectors.length ? (
