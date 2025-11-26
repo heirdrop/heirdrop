@@ -4,7 +4,7 @@ import { useMiniApp } from "@/contexts/miniapp-context";
 import heirlockAbi from "@/lib/heirlock-abi.json";
 import { HEIRLOCK_CONTRACT_ADDRESS } from "@/lib/heirlock-contract";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { BaseError, isAddress } from "viem";
+import { BaseError, formatUnits, isAddress } from "viem";
 import { useAccount, useChainId, useConnect, usePublicClient, useSwitchChain, useWriteContract } from "wagmi";
 import { celoSepolia } from "wagmi/chains";
 
@@ -64,6 +64,50 @@ type AssetVerificationState = {
   status: "idle" | "pending" | "verified" | "error";
   note?: string;
 };
+
+const CELO_NATIVE_ADDRESS = "0x471EcE3750Da237f93B8E339c536989b8978a438";
+
+type TokenCandidate = {
+  id: string;
+  symbol: string;
+  address: `0x${string}`;
+  decimals?: number;
+  category: AssetHolding["category"];
+};
+
+const celoSepoliaTokenCandidates: TokenCandidate[] = [
+  {
+    id: "cusd",
+    symbol: "cUSD",
+    address: "0x874069Fa1Eb16D44d622F2e0Ca25eeA172369bC1",
+    decimals: 18,
+    category: "erc20",
+  },
+  {
+    id: "ceur",
+    symbol: "cEUR",
+    address: "0x10c892A6EbcD37B8b6cA16b89cD63F9136a2B7b7",
+    decimals: 18,
+    category: "erc20",
+  },
+  {
+    id: "creal",
+    symbol: "cREAL",
+    address: "0xE4D517785D091D3c54818832DB6094bcc2744545",
+    decimals: 18,
+    category: "erc20",
+  },
+];
+
+const erc20BalanceAbi = [
+  {
+    name: "balanceOf",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address", internalType: "address" }],
+    outputs: [{ name: "", type: "uint256", internalType: "uint256" }],
+  },
+] as const;
 
 function formatBirthDate(dateValue: string) {
   const trimmed = dateValue.trim();
@@ -166,6 +210,8 @@ export default function Grantor() {
   const [checkInMessage, setCheckInMessage] = useState<string | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [connectingConnectorId, setConnectingConnectorId] = useState<string | null>(null);
+  const [isLoadingHoldings, setIsLoadingHoldings] = useState(false);
+  const [holdingsError, setHoldingsError] = useState<string | null>(null);
 
   // Wallet connection hooks
   const { address, isConnected, isConnecting } = useAccount();
@@ -189,9 +235,10 @@ export default function Grantor() {
 
   // Extract user data from context
   const user = context?.user;
+  const connectedWalletAddress = address || null;
   // Use connected wallet address if available, otherwise fall back to user custody/verification
   const walletAddress =
-    address || user?.custody || user?.verifications?.[0] || "0x1e4B...605B";
+    connectedWalletAddress || user?.custody || user?.verifications?.[0] || "0x1e4B...605B";
 
   const availableConnectors = useMemo(
     () =>
@@ -300,55 +347,81 @@ export default function Grantor() {
     }
   };
 
-  // mock holdings anchored by connected wallet
   useEffect(() => {
-    if (!walletAddress) return;
-    const normalized = walletAddress.toLowerCase();
-    const dynamicFactor = normalized.charCodeAt(2) % 5;
-    const sample: AssetHolding[] = [
-      {
-        id: "eth-mainnet",
-        chain: "Ethereum",
-        chainId: 1,
-        symbol: "ETH",
-        balance: 1.87 + dynamicFactor * 0.13,
-        fiatValue: 1.87 * 3200 + dynamicFactor * 150,
-        category: "native",
-        address: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
-      },
-      {
-        id: "base-usdc",
-        chain: "Base",
-        chainId: 8453,
-        symbol: "USDC",
-        balance: 12500 + dynamicFactor * 320,
-        fiatValue: 12500 + dynamicFactor * 320,
-        category: "erc20",
-        address: "0x833589fCd6eDb6Aad95d5baae5c2F9B3C6a3cB72",
-      },
-      {
-        id: "celo-native",
-        chain: "Celo",
-        chainId: targetChain.id,
-        symbol: "CELO",
-        balance: 480.12 + dynamicFactor * 8,
-        fiatValue: (480.12 + dynamicFactor * 8) * 0.85,
-        category: "native",
-        address: "0x471EcE3750Da237f93B8E339c536989b8978a438",
-      },
-      {
-        id: "polygon-dai",
-        chain: "Polygon",
-        chainId: 137,
-        symbol: "DAI",
-        balance: 3000 + dynamicFactor * 45,
-        fiatValue: 3000 + dynamicFactor * 45,
-        category: "erc20",
-        address: "0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063",
-      },
-    ];
-    setAssets(sample);
-  }, [walletAddress]);
+    if (!connectedWalletAddress || !connectedWalletAddress.startsWith("0x")) {
+      setAssets([]);
+      return;
+    }
+    if (!publicClient) return;
+    if (!isConnected) return;
+    if (!isOnTargetChain) {
+      setAssets([]);
+      setHoldingsError("Switch to Celo Sepolia to load your balances.");
+      return;
+    }
+    let cancelled = false;
+    const ownerAddress = connectedWalletAddress as `0x${string}`;
+    const fetchHoldings = async () => {
+      setIsLoadingHoldings(true);
+      setHoldingsError(null);
+      try {
+        const holdings: AssetHolding[] = [];
+        const nativeBalance = await publicClient.getBalance({ address: ownerAddress });
+        if (nativeBalance > 0n) {
+          const amount = Number(formatUnits(nativeBalance, 18));
+          holdings.push({
+            id: "celo-native",
+            chain: "Celo (Sepolia)",
+            chainId: targetChain.id,
+            symbol: "CELO",
+            balance: amount,
+            fiatValue: amount,
+            category: "native",
+            address: CELO_NATIVE_ADDRESS,
+          });
+        }
+        for (const token of celoSepoliaTokenCandidates) {
+          const code = await publicClient.getCode({ address: token.address });
+          if (!code || code === "0x") continue;
+          const balance = (await publicClient.readContract({
+            abi: erc20BalanceAbi,
+            address: token.address,
+            functionName: "balanceOf",
+            args: [ownerAddress],
+          })) as bigint;
+          if (balance === 0n) continue;
+          const decimals = token.decimals ?? 18;
+          const amount = Number(formatUnits(balance, decimals));
+          holdings.push({
+            id: token.id,
+            chain: "Celo (Sepolia)",
+            chainId: targetChain.id,
+            symbol: token.symbol,
+            balance: amount,
+            fiatValue: amount,
+            category: token.category,
+            address: token.address,
+          });
+        }
+        if (!cancelled) {
+          setAssets(holdings);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setAssets([]);
+          setHoldingsError(formatContractError(error));
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingHoldings(false);
+        }
+      }
+    };
+    fetchHoldings();
+    return () => {
+      cancelled = true;
+    };
+  }, [connectedWalletAddress, publicClient, isConnected, isOnTargetChain, targetChain.id]);
 
   useEffect(() => {
     setAssetVerification((current) => {
@@ -648,10 +721,9 @@ export default function Grantor() {
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Step 1 · Inventory</p>
-              <h3 className="text-2xl font-semibold text-foreground">Verify cross-chain holdings</h3>
+              <h3 className="text-2xl font-semibold text-foreground">Verify your Celo holdings</h3>
               <p className="text-sm text-muted-foreground">
-                Surface the assets living across your wallets so you can decide what the Heirlock
-                contract should inherit.
+                We read your balances directly from Celo Sepolia so every allocation references a contract that actually exists on-chain.
               </p>
             </div>
             <div className="flex flex-col items-end gap-2 text-right text-xs text-muted-foreground">
@@ -709,74 +781,92 @@ export default function Grantor() {
           )}
 
           <div className="space-y-3">
-            {assets.map((asset) => {
-              const verification = assetVerification[asset.id];
-              const status = verification?.status || "idle";
-              const isPending = status === "pending";
-              const isVerified = status === "verified";
-              const isError = status === "error";
-              const buttonDisabled = !isConnected || isPending || isVerified || isConnecting;
-              return (
-                <div
-                  key={asset.id}
-                  className="flex flex-col gap-4 rounded-2xl border border-border/60 bg-card/80 p-4 md:flex-row md:items-center md:justify-between"
-                >
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">
-                      {asset.symbol} <span className="text-xs text-muted-foreground">· {asset.chain}</span>
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {asset.category === "native" ? "Native" : "ERC-20"} asset{" "}
-                      {asset.address && `• ${formatAddress(asset.address)}`}
-                    </p>
-                  </div>
-                  <div className="flex flex-col gap-2 text-sm text-muted-foreground md:items-end">
-                    <div className="text-right">
-                      <p className="font-semibold text-foreground">{asset.balance.toFixed(2)}</p>
-                      <p className="text-xs">{currencyFormatter.format(asset.fiatValue)}</p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleVerifyAsset(asset)}
-                        disabled={buttonDisabled}
-                        className={`rounded-full px-4 py-1 text-xs font-semibold transition ${
-                          isVerified
-                            ? "bg-emerald-500/20 text-emerald-200"
-                            : "bg-primary/10 text-primary hover:bg-primary/20"
-                        } disabled:cursor-not-allowed disabled:opacity-50`}
-                      >
-                        {isVerified ? "Chain verified" : isPending ? "Verifying..." : `Verify ${asset.chain}`}
-                      </button>
-                      <span
-                        className={`rounded-full border px-3 py-1 text-[11px] ${
-                          isVerified
-                            ? "border-emerald-500/40 text-emerald-200"
-                            : isError
-                            ? "border-destructive/40 text-destructive"
-                            : "border-border text-muted-foreground"
-                        }`}
-                      >
-                        {isVerified ? "Ready for will" : isError ? "Needs attention" : "Not added"}
-                      </span>
-                    </div>
-                    {verification?.note && (
-                      <p
-                        className={`text-xs ${
-                          isVerified
-                            ? "text-emerald-200"
-                            : isError
-                            ? "text-destructive"
-                            : "text-muted-foreground"
-                        }`}
-                      >
-                        {verification.note}
+            {isLoadingHoldings ? (
+              <div className="flex items-center justify-center rounded-2xl border border-border/60 bg-card/80 p-6 text-sm text-muted-foreground">
+                <div className="mr-3 h-4 w-4 animate-spin rounded-full border-b-2 border-primary" />
+                Syncing balances on Celo Sepolia...
+              </div>
+            ) : holdingsError ? (
+              <div className="rounded-2xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
+                {holdingsError}
+              </div>
+            ) : assets.length ? (
+              assets.map((asset) => {
+                const verification = assetVerification[asset.id];
+                const status = verification?.status || "idle";
+                const isPending = status === "pending";
+                const isVerified = status === "verified";
+                const isError = status === "error";
+                const buttonDisabled = !isConnected || isPending || isVerified || isConnecting;
+                return (
+                  <div
+                    key={asset.id}
+                    className="flex flex-col gap-4 rounded-2xl border border-border/60 bg-card/80 p-4 md:flex-row md:items-center md:justify-between"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">
+                        {asset.symbol} <span className="text-xs text-muted-foreground">· {asset.chain}</span>
                       </p>
-                    )}
+                      <p className="text-xs text-muted-foreground">
+                        {asset.category === "native" ? "Native" : "ERC-20"} asset{" "}
+                        {asset.address && `• ${formatAddress(asset.address)}`}
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-2 text-sm text-muted-foreground md:items-end">
+                      <div className="text-right">
+                        <p className="font-semibold text-foreground">{asset.balance.toFixed(4)}</p>
+                        <p className="text-xs">
+                          {currencyFormatter.format(asset.fiatValue)}{" "}
+                          <span className="text-muted-foreground">est.</span>
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleVerifyAsset(asset)}
+                          disabled={buttonDisabled}
+                          className={`rounded-full px-4 py-1 text-xs font-semibold transition ${
+                            isVerified
+                              ? "bg-emerald-500/20 text-emerald-200"
+                              : "bg-primary/10 text-primary hover:bg-primary/20"
+                          } disabled:cursor-not-allowed disabled:opacity-50`}
+                        >
+                          {isVerified ? "Chain verified" : isPending ? "Verifying..." : `Verify ${asset.chain}`}
+                        </button>
+                        <span
+                          className={`rounded-full border px-3 py-1 text-[11px] ${
+                            isVerified
+                              ? "border-emerald-500/40 text-emerald-200"
+                              : isError
+                              ? "border-destructive/40 text-destructive"
+                              : "border-border text-muted-foreground"
+                          }`}
+                        >
+                          {isVerified ? "Ready for will" : isError ? "Needs attention" : "Not added"}
+                        </span>
+                      </div>
+                      {verification?.note && (
+                        <p
+                          className={`text-xs ${
+                            isVerified
+                              ? "text-emerald-200"
+                              : isError
+                              ? "text-destructive"
+                              : "text-muted-foreground"
+                          }`}
+                        >
+                          {verification.note}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })
+            ) : (
+              <div className="rounded-2xl border border-border/60 bg-card/80 p-4 text-sm text-muted-foreground">
+                No Celo Sepolia holdings detected yet. Deposit CELO or stablecoins into this wallet and refresh.
+              </div>
+            )}
           </div>
 
           <div className="grid gap-4 md:grid-cols-3">
