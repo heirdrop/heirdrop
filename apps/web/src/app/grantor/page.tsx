@@ -75,6 +75,8 @@ type TokenCandidate = {
   category: AssetHolding["category"];
 };
 
+const CELO_NATIVE_ADDRESS = "0x471EcE3750Da237f93B8E339c536989b8978a438";
+
 const celoSepoliaTokenCandidates: TokenCandidate[] = [
   {
     id: "cusd",
@@ -478,6 +480,20 @@ export default function Grantor() {
       setHoldingsError(null);
       try {
         const holdings: AssetHolding[] = [];
+        const nativeBalance = await publicClient.getBalance({ address: ownerAddress });
+        if (nativeBalance > 0n) {
+          const amount = Number(formatUnits(nativeBalance, 18));
+          holdings.push({
+            id: "celo-native",
+            chain: "Celo (Sepolia)",
+            chainId: targetChain.id,
+            symbol: "CELO",
+            balance: amount,
+            fiatValue: amount,
+            category: "native",
+            address: CELO_NATIVE_ADDRESS,
+          });
+        }
         for (const token of celoSepoliaTokenCandidates) {
           const code = await publicClient.getCode({ address: token.address });
           if (!code || code === "0x") continue;
