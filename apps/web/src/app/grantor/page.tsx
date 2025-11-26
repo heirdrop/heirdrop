@@ -65,8 +65,6 @@ type AssetVerificationState = {
   note?: string;
 };
 
-const CELO_NATIVE_ADDRESS = "0x471EcE3750Da237f93B8E339c536989b8978a438";
-
 type TokenCandidate = {
   id: string;
   symbol: string;
@@ -108,6 +106,21 @@ const erc20BalanceAbi = [
     outputs: [{ name: "", type: "uint256", internalType: "uint256" }],
   },
 ] as const;
+
+const erc20ApproveAbi = [
+  {
+    name: "approve",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "spender", type: "address", internalType: "address" },
+      { name: "amount", type: "uint256", internalType: "uint256" },
+    ],
+    outputs: [{ name: "", type: "bool", internalType: "bool" }],
+  },
+] as const;
+
+const MAX_UINT256 = (1n << 256n) - 1n;
 
 function formatBirthDate(dateValue: string) {
   const trimmed = dateValue.trim();
@@ -327,13 +340,25 @@ export default function Grantor() {
       if (!isConnected || !address) {
         throw new Error("Connect your wallet before verifying holdings.");
       }
+      if (!publicClient) {
+        throw new Error("Wallet client is not ready yet. Please retry.");
+      }
+      if (!asset.address || asset.category !== "erc20") {
+        throw new Error("Only ERC-20 assets can be locked into Heirlock right now.");
+      }
       await ensureTargetChain();
-      await wait(600);
+      const approveHash = await writeContractAsync({
+        abi: erc20ApproveAbi,
+        address: asset.address as `0x${string}`,
+        functionName: "approve",
+        args: [HEIRLOCK_CONTRACT_ADDRESS, MAX_UINT256],
+      });
+      await publicClient.waitForTransactionReceipt({ hash: approveHash });
       setAssetVerification((current) => ({
         ...current,
         [asset.id]: {
           status: "verified",
-          note: `Added ${asset.symbol} from ${asset.chain}`,
+          note: `Allowance granted for ${asset.symbol}. Tx: ${approveHash.slice(0, 10)}...`,
         },
       }));
     } catch (error) {
@@ -366,20 +391,6 @@ export default function Grantor() {
       setHoldingsError(null);
       try {
         const holdings: AssetHolding[] = [];
-        const nativeBalance = await publicClient.getBalance({ address: ownerAddress });
-        if (nativeBalance > 0n) {
-          const amount = Number(formatUnits(nativeBalance, 18));
-          holdings.push({
-            id: "celo-native",
-            chain: "Celo (Sepolia)",
-            chainId: targetChain.id,
-            symbol: "CELO",
-            balance: amount,
-            fiatValue: amount,
-            category: "native",
-            address: CELO_NATIVE_ADDRESS,
-          });
-        }
         for (const token of celoSepoliaTokenCandidates) {
           const code = await publicClient.getCode({ address: token.address });
           if (!code || code === "0x") continue;
@@ -750,6 +761,9 @@ export default function Grantor() {
               )}
             </div>
           </div>
+          <p className="text-xs text-muted-foreground">
+            When you tap <em>Verify</em>, your wallet will send an ERC-20 approval transaction that allows the Heirlock contract to move that token once your heirs are eligible. Approve only the assets you intend to include.
+          </p>
 
           {!isConnected && (
             <div className="rounded-2xl border border-dashed border-border/60 bg-background/40 p-4 text-sm text-muted-foreground">
