@@ -34,7 +34,7 @@ export default function VerifyPage() {
     try {
       // Use ngrok URL if available (for development), otherwise use the origin
       const baseUrl = process.env.NEXT_PUBLIC_NGROK_URL || window.location.origin;
-      const endpoint = `${baseUrl}/api/auth/self/verify`;
+      const endpoint = process.env.NEXT_PUBLIC_HEIRLOCK_CONTRACT_ADDRESS!;
 
       const app = new SelfAppBuilder({
         version: 2,
@@ -43,7 +43,7 @@ export default function VerifyPage() {
         endpoint,
         logoBase64: "", // Add your base64 logo if needed
         userId: address.toLowerCase() as `0x${string}`,
-        endpointType: "staging_https",
+        endpointType: "staging_celo",
         userIdType: "hex",
         userDefinedData: JSON.stringify({
           purpose: "beneficiary_verification",

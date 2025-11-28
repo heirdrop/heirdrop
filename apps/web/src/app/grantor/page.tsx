@@ -3,23 +3,14 @@ import { HeartbeatLiveness } from "@/components/heartbeat-liveness";
 import { useMiniApp } from "@/contexts/miniapp-context";
 import heirlockAbi from "@/lib/heirlock-abi.json";
 import { HEIRLOCK_CONTRACT_ADDRESS } from "@/lib/heirlock-contract";
+import { AssetHolding } from "@/lib/assets";
+import { erc20ApproveAbi, MAX_UINT256 } from "@/lib/erc20";
+import { useWalletAssets } from "@/hooks/use-wallet-assets";
+import { useHeirlockAllocations } from "@/hooks/use-heirlock-allocations";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { BaseError, formatUnits, isAddress } from "viem";
+import { BaseError, isAddress } from "viem";
 import { useAccount, useChainId, useConnect, usePublicClient, useSwitchChain, useWriteContract } from "wagmi";
 import { celoSepolia } from "wagmi/chains";
-
-type AssetHolding = {
-  id: string;
-  chain: string;
-  chainId?: number;
-  layerZeroChainId?: number;
-  symbol: string;
-  balance: number;
-  fiatValue: number;
-  address?: string;
-  category: "native" | "erc20";
-  remote?: boolean;
-};
 
 type BeneficiaryEntry = {
   id: string;
@@ -66,123 +57,6 @@ type AssetVerificationState = {
   status: "idle" | "pending" | "verified" | "error";
   note?: string;
 };
-
-type TokenCandidate = {
-  id: string;
-  symbol: string;
-  address: `0x${string}`;
-  decimals?: number;
-  category: AssetHolding["category"];
-};
-
-const CELO_NATIVE_ADDRESS = "0x471EcE3750Da237f93B8E339c536989b8978a438";
-
-const celoSepoliaTokenCandidates: TokenCandidate[] = [
-  {
-    id: "cusd",
-    symbol: "cUSD",
-    address: "0x874069Fa1Eb16D44d622F2e0Ca25eeA172369bC1",
-    decimals: 18,
-    category: "erc20",
-  },
-  {
-    id: "ceur",
-    symbol: "cEUR",
-    address: "0x10c892A6EbcD37B8b6cA16b89cD63F9136a2B7b7",
-    decimals: 18,
-    category: "erc20",
-  },
-  {
-    id: "creal",
-    symbol: "cREAL",
-    address: "0xE4D517785D091D3c54818832DB6094bcc2744545",
-    decimals: 18,
-    category: "erc20",
-  },
-];
-
-const erc20BalanceAbi = [
-  {
-    name: "balanceOf",
-    type: "function",
-    stateMutability: "view",
-    inputs: [{ name: "account", type: "address", internalType: "address" }],
-    outputs: [{ name: "", type: "uint256", internalType: "uint256" }],
-  },
-] as const;
-
-const erc20ApproveAbi = [
-  {
-    name: "approve",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "spender", type: "address", internalType: "address" },
-      { name: "amount", type: "uint256", internalType: "uint256" },
-    ],
-    outputs: [{ name: "", type: "bool", internalType: "bool" }],
-  },
-] as const;
-
-const MAX_UINT256 = (1n << 256n) - 1n;
-
-const remoteChainTemplates: Array<TokenCandidate & {
-  chain: string;
-  layerZeroChainId: number;
-  chainId: number;
-}> = [
-  {
-    id: "eth-usdc",
-    chain: "Ethereum",
-    chainId: 1,
-    layerZeroChainId: 101,
-    symbol: "USDC",
-    address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-    decimals: 6,
-    category: "erc20",
-  },
-  {
-    id: "arb-usdc",
-    chain: "Arbitrum",
-    chainId: 42161,
-    layerZeroChainId: 110,
-    symbol: "USDC.e",
-    address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
-    decimals: 6,
-    category: "erc20",
-  },
-  {
-    id: "base-usdc",
-    chain: "Base",
-    chainId: 8453,
-    layerZeroChainId: 184,
-    symbol: "USDC",
-    address: "0x833589fCd6eDb6AadA95d5baae5C60a71B7B2aFd",
-    decimals: 6,
-    category: "erc20",
-  },
-];
-
-function generateRemoteHoldings(owner: string): AssetHolding[] {
-  if (!owner) return [];
-  const seed = owner.charCodeAt(2) % 5;
-  return remoteChainTemplates.map((template, index) => {
-    const modifier = (seed + index + 1) * 250;
-    const balance = (modifier / 1000) * 10; // deterministic pseudo-balance
-    return {
-      id: `${template.id}-${index}`,
-      chain: `${template.chain}`,
-      chainId: template.chainId,
-      layerZeroChainId: template.layerZeroChainId,
-      symbol: template.symbol,
-      balance,
-      fiatValue: balance,
-      category: template.category,
-      address: template.address,
-      remote: true,
-    };
-  });
-}
 
 function formatBirthDate(dateValue: string) {
   const trimmed = dateValue.trim();
@@ -252,12 +126,27 @@ function formatContractError(error: unknown) {
   return "Something went wrong while talking to the contract.";
 }
 
+const shareTypeLabels: Record<number, string> = {
+  0: "None",
+  1: "Absolute",
+  2: "BPS",
+};
+
+function formatShareAmount(shareType: number, shareAmount: bigint) {
+  if (shareType === 2) {
+    return `${Number(shareAmount) / 100}%`;
+  }
+  if (shareType === 1) {
+    return shareAmount.toString();
+  }
+  return "0";
+}
+
 export default function Grantor() {
   const { context, isMiniAppReady, isInMiniApp } = useMiniApp();
   const [isSavingCadence, setIsSavingCadence] = useState(false);
   const [lastCadenceUpdate, setLastCadenceUpdate] = useState<string | null>(null);
   const [cadenceMessage, setCadenceMessage] = useState<string | null>(null);
-  const [assets, setAssets] = useState<AssetHolding[]>([]);
   const [assetVerification, setAssetVerification] = useState<Record<string, AssetVerificationState>>({});
   const [personalNote, setPersonalNote] = useState(
     "If I miss my check-in window, please initiate the transfer exactly as I've described below."
@@ -285,8 +174,6 @@ export default function Grantor() {
   const [checkInMessage, setCheckInMessage] = useState<string | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [connectingConnectorId, setConnectingConnectorId] = useState<string | null>(null);
-  const [isLoadingHoldings, setIsLoadingHoldings] = useState(false);
-  const [holdingsError, setHoldingsError] = useState<string | null>(null);
 
   // Wallet connection hooks
   const { address, isConnected, isConnecting } = useAccount();
@@ -314,6 +201,29 @@ export default function Grantor() {
   // Use connected wallet address if available, otherwise fall back to user custody/verification
   const walletAddress =
     connectedWalletAddress || user?.custody || user?.verifications?.[0] || "0x1e4B...605B";
+  const {
+    assets,
+    isLoading: isLoadingHoldings,
+    error: holdingsError,
+    refresh: refreshHoldings,
+  } = useWalletAssets({
+    owner: connectedWalletAddress as `0x${string}` | null,
+    publicClient,
+    chainId,
+    targetChainId: targetChain.id,
+    isConnected,
+    includeRemoteHoldings: false,
+  });
+  const {
+    allocations,
+    status: allocationsStatus,
+    error: allocationsError,
+    refresh: refreshAllocations,
+  } = useHeirlockAllocations({
+    owner: connectedWalletAddress as `0x${string}` | null,
+    publicClient,
+    enabled: Boolean(isConnected && connectedWalletAddress && isOnTargetChain),
+  });
 
   const availableConnectors = useMemo(
     () =>
@@ -329,10 +239,14 @@ export default function Grantor() {
       return map;
     }, {});
   }, [assets]);
-  const verifiedAssets = useMemo(
-    () => assets.filter((asset) => assetVerification[asset.id]?.status === "verified"),
-    [assets, assetVerification]
-  );
+  const verifiedAssets = useMemo(() => {
+    return assets.filter((asset) => {
+      if (!asset.remote && asset.category === "erc20") {
+        return Boolean(asset.hasAllowance);
+      }
+      return assetVerification[asset.id]?.status === "verified";
+    });
+  }, [assets, assetVerification]);
   const verifiedAssetCount = verifiedAssets.length;
   const totalFiatValue = useMemo(
     () => assets.reduce((sum, asset) => sum + asset.fiatValue, 0),
@@ -405,7 +319,7 @@ export default function Grantor() {
       if (!asset.address) {
         throw new Error("Missing token address for this asset.");
       }
-      if (asset.layerZeroChainId && asset.chain !== "Celo (Sepolia)") {
+      if (asset.remote && asset.layerZeroChainId) {
         const response = await fetch("/api/layerzero/verify", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -450,6 +364,7 @@ export default function Grantor() {
           note: `Allowance granted for ${asset.symbol}. Tx: ${approveHash.slice(0, 10)}...`,
         },
       }));
+      refreshHoldings();
     } catch (error) {
       setAssetVerification((current) => ({
         ...current,
@@ -460,83 +375,6 @@ export default function Grantor() {
       }));
     }
   };
-
-  useEffect(() => {
-    if (!connectedWalletAddress || !connectedWalletAddress.startsWith("0x")) {
-      setAssets([]);
-      return;
-    }
-    if (!publicClient) return;
-    if (!isConnected) return;
-    if (!isOnTargetChain) {
-      setAssets([]);
-      setHoldingsError("Switch to Celo Sepolia to load your balances.");
-      return;
-    }
-    let cancelled = false;
-    const ownerAddress = connectedWalletAddress as `0x${string}`;
-    const fetchHoldings = async () => {
-      setIsLoadingHoldings(true);
-      setHoldingsError(null);
-      try {
-        const holdings: AssetHolding[] = [];
-        const nativeBalance = await publicClient.getBalance({ address: ownerAddress });
-        if (nativeBalance > 0n) {
-          const amount = Number(formatUnits(nativeBalance, 18));
-          holdings.push({
-            id: "celo-native",
-            chain: "Celo (Sepolia)",
-            chainId: targetChain.id,
-            symbol: "CELO",
-            balance: amount,
-            fiatValue: amount,
-            category: "native",
-            address: CELO_NATIVE_ADDRESS,
-          });
-        }
-        for (const token of celoSepoliaTokenCandidates) {
-          const code = await publicClient.getCode({ address: token.address });
-          if (!code || code === "0x") continue;
-          const balance = (await publicClient.readContract({
-            abi: erc20BalanceAbi,
-            address: token.address,
-            functionName: "balanceOf",
-            args: [ownerAddress],
-          })) as bigint;
-          if (balance === 0n) continue;
-          const decimals = token.decimals ?? 18;
-          const amount = Number(formatUnits(balance, decimals));
-          holdings.push({
-            id: token.id,
-            chain: "Celo (Sepolia)",
-            chainId: targetChain.id,
-            symbol: token.symbol,
-            balance: amount,
-            fiatValue: amount,
-            category: token.category,
-            address: token.address,
-          });
-        }
-        const remote = generateRemoteHoldings(ownerAddress);
-        if (!cancelled) {
-          setAssets([...holdings, ...remote]);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setAssets(generateRemoteHoldings(ownerAddress));
-          setHoldingsError(formatContractError(error));
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoadingHoldings(false);
-        }
-      }
-    };
-    fetchHoldings();
-    return () => {
-      cancelled = true;
-    };
-  }, [connectedWalletAddress, publicClient, isConnected, isOnTargetChain, targetChain.id]);
 
   useEffect(() => {
     setAssetVerification((current) => {
@@ -806,6 +644,7 @@ export default function Grantor() {
             hashes.length > 1 ? "s" : ""
           }. Latest tx hash: ${hashes[hashes.length - 1]}. ${reminder}`
         );
+        refreshAllocations();
       }
     } catch (error) {
       setWillStatusMessage(formatContractError(error));
@@ -910,11 +749,17 @@ export default function Grantor() {
               </div>
             ) : assets.length ? (
               assets.map((asset) => {
-                const verification = assetVerification[asset.id];
-                const status = verification?.status || "idle";
-                const isPending = status === "pending";
-                const isVerified = status === "verified";
-                const isError = status === "error";
+                const tracked = assetVerification[asset.id];
+                const verification: AssetVerificationState =
+                  !asset.remote && asset.category === "erc20" && asset.hasAllowance
+                    ? {
+                        status: "verified",
+                        note: tracked?.note || "Allowance detected on Heirlock.",
+                      }
+                    : tracked || { status: "idle" };
+                const isPending = verification.status === "pending";
+                const isVerified = verification.status === "verified";
+                const isError = verification.status === "error";
                 const buttonDisabled = !isConnected || isPending || isVerified || isConnecting;
                 return (
                   <div
@@ -1080,8 +925,86 @@ export default function Grantor() {
         </section>
 
         <section className="rounded-3xl border border-border bg-card/80 p-8">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Step 3 · On-chain instructions</p>
+              <h3 className="text-2xl font-semibold text-foreground">Review stored allocations</h3>
+              <p className="text-sm text-muted-foreground">
+                We query Heirlock directly so you can verify every beneficiary + asset pair that&apos;s already committed on Celo.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={refreshAllocations}
+              disabled={allocationsStatus === "loading"}
+              className="self-end rounded-full border border-border px-4 py-2 text-xs font-semibold text-muted-foreground transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {allocationsStatus === "loading" ? "Syncing..." : "Refresh allocations"}
+            </button>
+          </div>
+          {!isConnected ? (
+            <div className="mt-6 rounded-2xl border border-dashed border-border/60 bg-background/40 p-4 text-sm text-muted-foreground">
+              Connect your wallet to inspect the instructions already written to Heirlock.
+            </div>
+          ) : !isOnTargetChain ? (
+            <div className="mt-6 rounded-2xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
+              Switch to Celo Sepolia to read your saved allocations.
+            </div>
+          ) : allocationsStatus === "loading" ? (
+            <div className="mt-6 flex items-center justify-center rounded-2xl border border-border/60 bg-card/80 p-4 text-sm text-muted-foreground">
+              <div className="mr-3 h-4 w-4 animate-spin rounded-full border-b-2 border-primary" />
+              Reading Heirlock state...
+            </div>
+          ) : allocationsError ? (
+            <div className="mt-6 rounded-2xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
+              {allocationsError}
+            </div>
+          ) : allocations.length === 0 ? (
+            <div className="mt-6 rounded-2xl border border-border/60 bg-card/80 p-4 text-sm text-muted-foreground">
+              No on-chain beneficiaries yet. Draft instructions below to populate this list.
+            </div>
+          ) : (
+            <div className="mt-6 space-y-4">
+              {allocations.map((entry) => (
+                <div
+                  key={entry.beneficiary}
+                  className="space-y-3 rounded-2xl border border-border/70 bg-card/70 p-4"
+                >
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">Beneficiary</p>
+                      <p className="font-mono text-sm text-foreground">{formatAddress(entry.beneficiary)}</p>
+                    </div>
+                    <span className="rounded-full border border-border px-3 py-1 text-[11px] text-muted-foreground">
+                      Assets mapped · {entry.shares.length}
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {entry.shares.map((share) => (
+                      <div
+                        key={`${entry.beneficiary}-${share.asset}`}
+                        className="rounded-xl border border-border/60 bg-background/40 p-3 text-sm text-muted-foreground"
+                      >
+                        <p className="font-mono text-xs text-foreground">{formatAddress(share.asset)}</p>
+                        <p className="text-xs">
+                          {shareTypeLabels[share.shareType] || "Unknown"} · {formatShareAmount(share.shareType, share.shareAmount)}
+                        </p>
+                        {share.claimed && (
+                          <p className="text-[11px] text-emerald-300">Already claimed</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="rounded-3xl border border-border bg-card/80 p-8">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Step 4 · Draft</p>
               <h3 className="text-2xl font-semibold text-foreground">Draft your will</h3>
               <p className="text-sm text-muted-foreground">
                 Configure the liveness check window, articulate your intent, and map assets to

@@ -2,7 +2,7 @@ import { createPublicClient, http, type Address, type Hash } from "viem";
 import { celoSepolia } from "viem/chains";
 import heirlockAbi from "./heirlock-abi.json";
 
-const FALLBACK_ADDRESS = "0xdead5ee9ea38d2ac5802ff9d76335db3eda0dead";
+const FALLBACK_ADDRESS = "0xdead00001867a292b3944666961a9042499c5da9";
 const envAddress =
   process.env.NEXT_PUBLIC_HEIRLOCK_CONTRACT_ADDRESS ||
   process.env.NEXT_PUBLIC_HEIRLOCK_ADDRESS ||
@@ -27,7 +27,7 @@ export async function generateIdentityHash(
   rpcUrl?: string
 ): Promise<Hash> {
   const client = getHeirlockClient(rpcUrl);
-  
+
   const result = await client.readContract({
     address: HEIRLOCK_CONTRACT_ADDRESS,
     abi: heirlockAbi as HeirlockABI,
@@ -40,7 +40,7 @@ export async function generateIdentityHash(
       },
     ],
   });
-  
+
   return result as Hash;
 }
 
@@ -50,7 +50,7 @@ export async function getIdentityInfo(
   rpcUrl?: string
 ) {
   const client = getHeirlockClient(rpcUrl);
-  
+
   return await client.readContract({
     address: HEIRLOCK_CONTRACT_ADDRESS,
     abi: heirlockAbi as HeirlockABI,
@@ -65,7 +65,7 @@ export async function getIdentityWillAssets(
   rpcUrl?: string
 ) {
   const client = getHeirlockClient(rpcUrl);
-  
+
   return await client.readContract({
     address: HEIRLOCK_CONTRACT_ADDRESS,
     abi: heirlockAbi as HeirlockABI,
@@ -80,13 +80,13 @@ export async function hasIdentityClaimed(
   rpcUrl?: string
 ): Promise<boolean> {
   const client = getHeirlockClient(rpcUrl);
-  
-  return await client.readContract({
+
+  return (await client.readContract({
     address: HEIRLOCK_CONTRACT_ADDRESS,
     abi: heirlockAbi as HeirlockABI,
     functionName: "hasIdentityClaimed",
     args: [owner, identityHash],
-  }) as boolean;
+  })) as boolean;
 }
 
 export async function isOwnerAlive(
@@ -94,13 +94,13 @@ export async function isOwnerAlive(
   rpcUrl?: string
 ): Promise<boolean> {
   const client = getHeirlockClient(rpcUrl);
-  
-  return await client.readContract({
+
+  return (await client.readContract({
     address: HEIRLOCK_CONTRACT_ADDRESS,
     abi: heirlockAbi as HeirlockABI,
     functionName: "isOwnerAlive",
     args: [owner],
-  }) as boolean;
+  })) as boolean;
 }
 
 export type OwnerLiveliness = {
@@ -113,7 +113,7 @@ export async function getOwnerLiveliness(
   rpcUrl?: string
 ): Promise<OwnerLiveliness> {
   const client = getHeirlockClient(rpcUrl);
-  
+
   return (await client.readContract({
     address: HEIRLOCK_CONTRACT_ADDRESS,
     abi: heirlockAbi as HeirlockABI,
@@ -127,11 +127,11 @@ export async function getIdentityBeneficiaries(
   rpcUrl?: string
 ): Promise<`0x${string}`[]> {
   const client = getHeirlockClient(rpcUrl);
-  
-  return await client.readContract({
+
+  return (await client.readContract({
     address: HEIRLOCK_CONTRACT_ADDRESS,
     abi: heirlockAbi as HeirlockABI,
     functionName: "getIdentityBeneficiaries",
     args: [owner],
-  }) as `0x${string}`[];
+  })) as `0x${string}`[];
 }
